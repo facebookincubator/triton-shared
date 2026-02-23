@@ -1,0 +1,7 @@
+*.pyc
+.cache
+compile_commands.json
+build/*
+.vscode/*
+/python/examples/test_core.py
+/python/examples/test_annotations.py

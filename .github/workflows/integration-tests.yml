@@ -1,0 +1,13 @@
+name: Integration Tests
+
+on:
+  pull_request:
+    branches: [ "main" ]
+  push:
+    branches: [ "main" ]
+
+jobs:
+  call-workflow:
+    uses: ./.github/workflows/test-plugin.yml
+    with:
+        triton-shared-ref: ${{ github.ref }}
