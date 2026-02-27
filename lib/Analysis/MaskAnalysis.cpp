@@ -65,11 +65,10 @@ tensor::ExtractSliceOp MaskState::getExtractSlice(Value source,
   SmallVector<OpFoldResult> offsets(getRank(), builder.getIndexAttr(0));
   SmallVector<OpFoldResult> strides(getRank(), builder.getIndexAttr(1));
 
-  auto dstType = tensor::ExtractSliceOp::inferResultType(sourceType, offsets,
-                                                         dims, strides);
+  auto dstType = tensor::ExtractSliceOp::inferResultType(sourceType, dims);
 
-  return builder.create<tensor::ExtractSliceOp>(loc, dstType, source, offsets,
-                                                dims, strides);
+  return tensor::ExtractSliceOp::create(builder, loc, dstType, source, offsets,
+                                        dims, strides);
 }
 
 memref::SubViewOp MaskState::getSubview(Value source, const Location loc,
@@ -80,8 +79,8 @@ memref::SubViewOp MaskState::getSubview(Value source, const Location loc,
   auto dstType =
       memref::SubViewOp::inferResultType(sourceType, offsets, dims, strides);
 
-  return builder.create<memref::SubViewOp>(loc, cast<MemRefType>(dstType),
-                                           source, offsets, dims, strides);
+  return memref::SubViewOp::create(builder, loc, cast<MemRefType>(dstType),
+                                   source, offsets, dims, strides);
 }
 
 static memref::SubViewOp createSubview(Value src, Location loc, OpBuilder &b,
@@ -91,8 +90,8 @@ static memref::SubViewOp createSubview(Value src, Location loc, OpBuilder &b,
   auto srcType = cast<MemRefType>(src.getType());
   auto dstType =
       memref::SubViewOp::inferResultType(srcType, offsets, sizes, strides);
-  return b.create<memref::SubViewOp>(loc, cast<MemRefType>(dstType), src,
-                                     offsets, sizes, strides);
+  return memref::SubViewOp::create(b, loc, cast<MemRefType>(dstType), src,
+                                   offsets, sizes, strides);
 }
 
 // Assume block1 wraps around and the remainder is block2.
@@ -155,7 +154,8 @@ MaskState::getSideBySideSubviews(Value block1, Value block2, const Location loc,
                                  OpBuilder &builder) const {
   OpFoldResult subviewRowFull = dims[0];
   OpFoldResult subviewColFull = dims[1];
-  OpFoldResult col1 = builder.create<memref::DimOp>(loc, block1, 1).getResult();
+  OpFoldResult col1 =
+      memref::DimOp::create(builder, loc, block1, 1).getResult();
   OpFoldResult subviewCol1 = minOFRs(col1, subviewColFull, loc, builder);
   OpFoldResult subviewCol2 = subOFRs(subviewColFull, subviewCol1, loc, builder);
 
@@ -174,7 +174,8 @@ MaskState::getStackedSubviews(Value block1, Value block2, const Location loc,
                               OpBuilder &builder) const {
   OpFoldResult subviewRowFull = dims[0];
   OpFoldResult subviewColFull = dims[1];
-  OpFoldResult row1 = builder.create<memref::DimOp>(loc, block1, 0).getResult();
+  OpFoldResult row1 =
+      memref::DimOp::create(builder, loc, block1, 0).getResult();
   OpFoldResult subviewRow1 = minOFRs(row1, subviewRowFull, loc, builder);
   OpFoldResult subviewRow2 = subOFRs(subviewRowFull, subviewRow1, loc, builder);
 
@@ -314,8 +315,8 @@ LogicalResult MaskState::parseIntScalar(Value scalar, const Location loc,
   if (scalar.getType().isInteger(1)) {
     this->scalar = scalar;
   } else {
-    auto castOp =
-        builder.create<arith::IndexCastOp>(loc, builder.getIndexType(), scalar);
+    auto castOp = arith::IndexCastOp::create(builder, loc,
+                                             builder.getIndexType(), scalar);
     this->scalar = castOp.getResult();
   }
   return success();
@@ -407,18 +408,17 @@ LogicalResult MaskState::parseAnd(arith::AndIOp andOp, const Location loc,
             }
             auto targetTensorType =
                 RankedTensorType::get({size}, builder.getI32Type());
-            Value range =
-                builder
-                    .create<triton::MakeRangeOp>(loc, targetTensorType, 0, size)
-                    .getResult();
+            Value range = triton::MakeRangeOp::create(builder, loc,
+                                                      targetTensorType, 0, size)
+                              .getResult();
             Value v = ofrToIndexValue(ofr, loc, builder);
-            v = builder
-                    .create<arith::IndexCastUIOp>(loc, builder.getI32Type(), v)
+            v = arith::IndexCastUIOp::create(builder, loc, builder.getI32Type(),
+                                             v)
                     .getResult();
-            v = builder.create<triton::SplatOp>(loc, targetTensorType, v)
+            v = triton::SplatOp::create(builder, loc, targetTensorType, v)
                     .getResult();
-            return builder
-                .create<arith::CmpIOp>(loc, arith::CmpIPredicate::ult, range, v)
+            return arith::CmpIOp::create(builder, loc,
+                                         arith::CmpIPredicate::ult, range, v)
                 .getResult();
           };
           if (!lhsV) {
@@ -436,7 +436,7 @@ LogicalResult MaskState::parseAnd(arith::AndIOp andOp, const Location loc,
             continue;
           }
           // And the mask.
-          masks.push_back(builder.create<arith::AndIOp>(loc, lhsV, rhsV));
+          masks.push_back(arith::AndIOp::create(builder, loc, lhsV, rhsV));
         }
       }
       // Only support one unstructured mask.
@@ -494,8 +494,8 @@ LogicalResult MaskState::parseCmp(arith::CmpIOp cmpOp, const Location loc,
         SmallVector<ReassociationIndices> reassociation =
             *maybeReassociationMap;
         // Set masks.
-        unstructuredMask = builder.create<tensor::CollapseShapeOp>(
-            loc, flatType, cmpOp, reassociation);
+        unstructuredMask = tensor::CollapseShapeOp::create(
+            builder, loc, flatType, cmpOp, reassociation);
       }
       masks[cmpOpDim] = unstructuredMask;
     }

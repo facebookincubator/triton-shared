@@ -31,9 +31,6 @@
 using namespace mlir;
 using namespace triton;
 
-#define GEN_PASS_CLASSES
-#include "triton-shared/Conversion/TritonArithToLinalg/Passes.h.inc"
-
 void mlir::triton::populateTritonArithToLinalgCanonicalizationPatterns(
     RewritePatternSet &patterns) {
   patterns.add<MinMaxConverter<arith::CmpFOp>, MinMaxConverter<arith::CmpIOp>>(
