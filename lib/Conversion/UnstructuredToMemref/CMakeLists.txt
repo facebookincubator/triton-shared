@@ -1,6 +1,6 @@
 #===------------------------------------------------------------------------===#
 #
-# Copyright (c) Microsoft Corporation.
+# Copyright (c) Meta Platforms, Inc. and affiliates, Microsoft Corporation.
 # Licensed under the MIT license.
 #
 #===------------------------------------------------------------------------===#
