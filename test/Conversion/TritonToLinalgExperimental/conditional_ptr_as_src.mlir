@@ -29,7 +29,6 @@ module {
 // CHECK-LABEL:  func.func @simple_cf_into_structured_load
 // CHECK-SAME:   ([[PARAM_0_:%.+]]: memref<*xf32>, [[PARAM_1_:%.+]]: memref<*xf32>, [[PARAM_2_:%.+]]: i32, [[PARAM_3_:%.+]]: i32, [[PARAM_4_:%.+]]: i32, [[PARAM_5_:%.+]]: i32, [[PARAM_6_:%.+]]: i32, [[PARAM_7_:%.+]]: i32, [[PARAM_8_:%.+]]: i32) {
 // CHECK-DAG:       [[VAR_0_:%.+]] = tptr.type_offset f32  : i32
-// CHECK-DAG:       [[CST_6_:%.+]] = arith.constant 6 : index
 // CHECK-DAG:       [[CST_2_:%.+]] = arith.constant 2 : i32
 // CHECK-DAG:       [[CST_1_:%.+]] = arith.constant 1 : i32
 // CHECK-DAG:       [[VAR_cast_:%.+]] = memref.cast [[PARAM_0_]] : memref<*xf32> to memref<1xf32>
@@ -48,9 +47,9 @@ module {
 // CHECK:             scf.yield [[VAR_7_1_]] : !ptr.ptr<#tptr.default_memory_space>
 // CHECK:           }
 // CHECK:           [[VAR_4_:%.+]] = tptr.to_memref [[VAR_3_]] : <#tptr.default_memory_space> to memref<1xf32>
-// CHECK-DAG:       [[VAR_reinterpret_cast_:%.+]] = memref.reinterpret_cast [[VAR_4_]] to offset: {{.}}[[CST_6_]]{{.}}, sizes: [4], strides: [1] : memref<1xf32> to memref<4xf32, strided<[1], offset: ?>>
+// CHECK-DAG:       [[VAR_reinterpret_cast_:%.+]] = memref.reinterpret_cast [[VAR_4_]] to offset: [6], sizes: [4], strides: [1] : memref<1xf32> to memref<4xf32, strided<[1], offset: 6>>
 // CHECK-DAG:       [[RES_:%.+]] = memref.alloc() : memref<4xf32>
-// CHECK:           memref.copy [[VAR_reinterpret_cast_]], [[RES_]] : memref<4xf32, strided<[1], offset: ?>> to memref<4xf32>
+// CHECK:           memref.copy [[VAR_reinterpret_cast_]], [[RES_]] : memref<4xf32, strided<[1], offset: 6>> to memref<4xf32>
 // CHECK-DAG:       [[VAR_5_:%.+]] = bufferization.to_tensor [[RES_]] restrict writable : memref<4xf32> to tensor<4xf32>
 // CHECK-DAG:       [[VAR_reinterpret_cast_0_:%.+]] = memref.reinterpret_cast [[PARAM_1_]] to offset: [0], sizes: [4], strides: [1] : memref<*xf32> to memref<4xf32, strided<[1]>>
 // CHECK:           bufferization.materialize_in_destination [[VAR_5_]] in writable [[VAR_reinterpret_cast_0_]] : (tensor<4xf32>, memref<4xf32, strided<[1]>>) -> ()

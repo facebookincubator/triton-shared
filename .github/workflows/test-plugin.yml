@@ -92,7 +92,7 @@ jobs:
     - name: Install CPU backend example dependencies
       run: |
         python3 -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-        python3 -m pip install pytest
+        python3 -m pip install pytest numpy
 
     - name: Prepare CPU backend environment
       working-directory: triton
@@ -173,7 +173,7 @@ jobs:
     - name: Install CPU backend example dependencies
       run: |
         python3 -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-        python3 -m pip install pytest
+        python3 -m pip install pytest numpy
 
     - name: Prepare CPU backend environment
       working-directory: triton

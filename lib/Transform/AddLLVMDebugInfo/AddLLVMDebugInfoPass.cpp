@@ -16,12 +16,13 @@
 using namespace mlir;
 using namespace triton;
 
-#define GEN_PASS_CLASSES
+#define GEN_PASS_DEF_ADDLLVMDEBUGINFO
 #include "triton-shared/Transform/AddLLVMDebugInfo/Passes.h.inc"
 
 namespace {
 
-class AddLLVMDebugInfoPass : public AddLLVMDebugInfoBase<AddLLVMDebugInfoPass> {
+class AddLLVMDebugInfoPass
+    : public ::impl::AddLLVMDebugInfoBase<AddLLVMDebugInfoPass> {
 
   static LLVM::DISubprogramFlags setSubprogramFlags(FuncOp funcOp) {
     LLVM::DISubprogramFlags subprogramFlags = LLVM::DISubprogramFlags{};

@@ -87,6 +87,12 @@ public:
 
   void visitCallOperand(OpOperand &operand) override { return; }
 
+  void
+  visitNonControlFlowArguments(RegionSuccessor &successor,
+                               ArrayRef<BlockArgument> arguments) override {
+    return;
+  }
+
   void setToExitState(UseInfo *lattice) override {
     lattice->type = UseType::Undefined;
   }
