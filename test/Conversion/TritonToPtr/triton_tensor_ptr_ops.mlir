@@ -40,92 +40,92 @@ module {
   }
 }
 
-// CHECK-DAG:   [[MAP_0_:#.+]] = affine_map<(d0) -> (d0)>
-// CHECK-LABEL:  func.func @tensor_ptr
-// CHECK-SAME:   ([[PARAM_0_:%.+]]: !tt.ptr<i32>, [[PARAM_1_:%.+]]: !tt.ptr<i32>, [[PARAM_2_:%.+]]: i32, [[PARAM_3_:%.+]]: i32, [[PARAM_4_:%.+]]: i32, [[PARAM_5_:%.+]]: i32, [[PARAM_6_:%.+]]: i32, [[PARAM_7_:%.+]]: i32) {
-// CHECK-DAG:       [[VAR_0_:%.+]] = tptr.type_offset i64  : i32
-// CHECK-DAG:       [[CST_0_:%.+]] = arith.constant 0 : index
-// CHECK-DAG:       [[VAR_1_:%.+]] = tptr.type_offset i32  : i32
-// CHECK-DAG:       [[CST_2_:%.+]] = arith.constant 2 : i32
-// CHECK-DAG:       [[VAR_2_:%.+]] = builtin.unrealized_conversion_cast [[PARAM_1_]] : !tt.ptr<i32> to !ptr.ptr<#tptr.default_memory_space>
-// CHECK-DAG:       [[VAR_3_:%.+]] = builtin.unrealized_conversion_cast [[PARAM_0_]] : !tt.ptr<i32> to !ptr.ptr<#tptr.default_memory_space>
-// CHECK-DAG:       [[VAR_4_:%.+]] = tensor.empty() : tensor<16xi32>
-// CHECK-NOT: separator of consecutive DAGs
-// CHECK-DAG:       [[VAR_5_:%.+]] = linalg.fill ins([[CST_2_]] : i32) outs([[VAR_4_]] : tensor<16xi32>) -> tensor<16xi32>
-// CHECK-DAG:       [[VAR_6_:%.+]] = linalg.generic {indexing_maps = [#map], iterator_types = ["parallel"]} outs([[VAR_4_]] : tensor<16xi32>) {
-// CHECK:           ^bb0([[IN_0_:%.+]]: i32):
-// CHECK:             [[VAR_22_:%.+]] = linalg.index 0 : index
-// CHECK:             [[VAR_23_:%.+]] = arith.index_cast [[VAR_22_]] : index to i32
-// CHECK:             linalg.yield [[VAR_23_]] : i32
+// CHECK: #[[$ATTR_0:.+]] = affine_map<(d0) -> (d0)>
+// CHECK-LABEL:   func.func @tensor_ptr(
+// CHECK-SAME:      %[[ARG0:.*]]: !tt.ptr<i32>, %[[ARG1:.*]]: !tt.ptr<i32>, %[[ARG2:.*]]: i32, %[[ARG3:.*]]: i32, %[[ARG4:.*]]: i32, %[[ARG5:.*]]: i32, %[[ARG6:.*]]: i32, %[[ARG7:.*]]: i32) {
+// CHECK:           %[[CONSTANT_0:.*]] = arith.constant 0 : index
+// CHECK:           %[[CONSTANT_1:.*]] = arith.constant 2 : i32
+// CHECK:           %[[UNREALIZED_CONVERSION_CAST_0:.*]] = builtin.unrealized_conversion_cast %[[ARG1]] : !tt.ptr<i32> to !ptr.ptr<#tptr.default_memory_space>
+// CHECK:           %[[UNREALIZED_CONVERSION_CAST_1:.*]] = builtin.unrealized_conversion_cast %[[ARG0]] : !tt.ptr<i32> to !ptr.ptr<#tptr.default_memory_space>
+// CHECK:           %[[EMPTY_0:.*]] = tensor.empty() : tensor<16xi32>
+// CHECK:           %[[FILL_0:.*]] = linalg.fill ins(%[[CONSTANT_1]] : i32) outs(%[[EMPTY_0]] : tensor<16xi32>) -> tensor<16xi32>
+// CHECK:           %[[GENERIC_0:.*]] = linalg.generic {indexing_maps = [#[[$ATTR_0]]], iterator_types = ["parallel"]} outs(%[[EMPTY_0]] : tensor<16xi32>) {
+// CHECK:           ^bb0(%[[VAL_0:.*]]: i32):
+// CHECK:             %[[INDEX_0:.*]] = linalg.index 0 : index
+// CHECK:             %[[INDEX_CAST_0:.*]] = arith.index_cast %[[INDEX_0]] : index to i32
+// CHECK:             linalg.yield %[[INDEX_CAST_0]] : i32
 // CHECK:           } -> tensor<16xi32>
-// CHECK:           [[VAR_7_:%.+]] = tensor.empty() : tensor<16x!ptr.ptr<#tptr.default_memory_space>>
-// CHECK:           [[VAR_8_:%.+]] = linalg.fill ins([[VAR_3_]] : !ptr.ptr<#tptr.default_memory_space>) outs([[VAR_7_]] : tensor<16x!ptr.ptr<#tptr.default_memory_space>>) -> tensor<16x!ptr.ptr<#tptr.default_memory_space>>
-// CHECK:           [[VAR_9_:%.+]] = linalg.generic {indexing_maps = [#map, #map, #map], iterator_types = ["parallel"]} ins([[VAR_8_]], [[VAR_6_]] : tensor<16x!ptr.ptr<#tptr.default_memory_space>>, tensor<16xi32>) outs([[VAR_8_]] : tensor<16x!ptr.ptr<#tptr.default_memory_space>>) {
-// CHECK:           ^bb0([[IN_1_:%.+]]: !ptr.ptr<#tptr.default_memory_space>, [[IN_2_:%.+]]: i32, [[IN_3_:%.+]]: !ptr.ptr<#tptr.default_memory_space>):
-// CHECK:             [[VAR_22_1_:%.+]] = arith.muli [[IN_2_]], [[VAR_1_]] : i32
-// CHECK:             [[VAR_23_1_:%.+]] = tptr.ptradd [[IN_1_]] [[VAR_22_1_]] : <#tptr.default_memory_space>, i32 to <#tptr.default_memory_space>
-// CHECK:             linalg.yield [[VAR_23_1_]] : !ptr.ptr<#tptr.default_memory_space>
+// CHECK:           %[[EMPTY_1:.*]] = tensor.empty() : tensor<16x!ptr.ptr<#tptr.default_memory_space>>
+// CHECK:           %[[FILL_1:.*]] = linalg.fill ins(%[[UNREALIZED_CONVERSION_CAST_1]] : !ptr.ptr<#tptr.default_memory_space>) outs(%[[EMPTY_1]] : tensor<16x!ptr.ptr<#tptr.default_memory_space>>) -> tensor<16x!ptr.ptr<#tptr.default_memory_space>>
+// CHECK:           %[[GENERIC_1:.*]] = linalg.generic {indexing_maps = [#[[$ATTR_0]], #[[$ATTR_0]], #[[$ATTR_0]]], iterator_types = ["parallel"]} ins(%[[FILL_1]], %[[GENERIC_0]] : tensor<16x!ptr.ptr<#tptr.default_memory_space>>, tensor<16xi32>) outs(%[[FILL_1]] : tensor<16x!ptr.ptr<#tptr.default_memory_space>>) {
+// CHECK:           ^bb0(%[[VAL_1:.*]]: !ptr.ptr<#tptr.default_memory_space>, %[[VAL_2:.*]]: i32, %[[VAL_3:.*]]: !ptr.ptr<#tptr.default_memory_space>):
+// CHECK:             %[[TYPE_OFFSET_0:.*]] = ptr.type_offset i32 : i32
+// CHECK:             %[[MULI_0:.*]] = arith.muli %[[VAL_2]], %[[TYPE_OFFSET_0]] : i32
+// CHECK:             %[[PTR_ADD_0:.*]] = ptr.ptr_add %[[VAL_1]], %[[MULI_0]] : !ptr.ptr<#tptr.default_memory_space>, i32
+// CHECK:             linalg.yield %[[PTR_ADD_0]] : !ptr.ptr<#tptr.default_memory_space>
 // CHECK:           } -> tensor<16x!ptr.ptr<#tptr.default_memory_space>>
-// CHECK:           [[VAR_10_:%.+]] = linalg.generic {indexing_maps = [#map, #map], iterator_types = ["parallel"]} ins([[VAR_9_]] : tensor<16x!ptr.ptr<#tptr.default_memory_space>>) outs([[VAR_4_]] : tensor<16xi32>) {
-// CHECK:           ^bb0([[IN_4_:%.+]]: !ptr.ptr<#tptr.default_memory_space>, [[IN_5_:%.+]]: i32):
-// CHECK:             [[VAR_22_2_:%.+]] = tptr.to_memref [[IN_4_]] : <#tptr.default_memory_space> to memref<1xi32>
-// CHECK:             [[VAR_23_1_:%.+]] = memref.load [[VAR_22_2_]]{{.}}[[CST_0_]]{{.}} : memref<1xi32>
-// CHECK:             linalg.yield [[VAR_23_1_]] : i32
+// CHECK:           %[[GENERIC_2:.*]] = linalg.generic {indexing_maps = [#[[$ATTR_0]], #[[$ATTR_0]]], iterator_types = ["parallel"]} ins(%[[GENERIC_1]] : tensor<16x!ptr.ptr<#tptr.default_memory_space>>) outs(%[[EMPTY_0]] : tensor<16xi32>) {
+// CHECK:           ^bb0(%[[VAL_4:.*]]: !ptr.ptr<#tptr.default_memory_space>, %[[VAL_5:.*]]: i32):
+// CHECK:             %[[FROM_PTR_0:.*]] = ptr.from_ptr %[[VAL_4]] : <#tptr.default_memory_space> -> memref<1xi32, #tptr.default_memory_space>
+// CHECK:             %[[LOAD_0:.*]] = memref.load %[[FROM_PTR_0]]{{\[}}%[[CONSTANT_0]]] : memref<1xi32, #tptr.default_memory_space>
+// CHECK:             linalg.yield %[[LOAD_0]] : i32
 // CHECK:           } -> tensor<16xi32>
-// CHECK:           [[VAR_11_:%.+]] = tensor.empty() : tensor<16xi64>
-// CHECK:           [[VAR_12_:%.+]] = linalg.generic {indexing_maps = [#map, #map], iterator_types = ["parallel"]} ins([[VAR_10_]] : tensor<16xi32>) outs([[VAR_11_]] : tensor<16xi64>) {
-// CHECK:           ^bb0([[IN_6_:%.+]]: i32, [[IN_7_:%.+]]: i64):
-// CHECK:             [[VAR_22_3_:%.+]] = arith.extsi [[IN_6_]] : i32 to i64
-// CHECK:             linalg.yield [[VAR_22_3_]] : i64
+// CHECK:           %[[EMPTY_2:.*]] = tensor.empty() : tensor<16xi64>
+// CHECK:           %[[GENERIC_3:.*]] = linalg.generic {indexing_maps = [#[[$ATTR_0]], #[[$ATTR_0]]], iterator_types = ["parallel"]} ins(%[[GENERIC_2]] : tensor<16xi32>) outs(%[[EMPTY_2]] : tensor<16xi64>) {
+// CHECK:           ^bb0(%[[VAL_6:.*]]: i32, %[[VAL_7:.*]]: i64):
+// CHECK:             %[[EXTSI_0:.*]] = arith.extsi %[[VAL_6]] : i32 to i64
+// CHECK:             linalg.yield %[[EXTSI_0]] : i64
 // CHECK:           } -> tensor<16xi64>
-// CHECK:           [[VAR_13_:%.+]] = linalg.generic {indexing_maps = [#map, #map], iterator_types = ["parallel"]} ins([[VAR_12_]] : tensor<16xi64>) outs([[VAR_7_]] : tensor<16x!ptr.ptr<#tptr.default_memory_space>>) {
-// CHECK:           ^bb0([[IN_8_:%.+]]: i64, [[IN_9_:%.+]]: !ptr.ptr<#tptr.default_memory_space>):
-// CHECK:             [[VAR_22_4_:%.+]] = tptr.inttoptr [[IN_8_]] : i64 to <#tptr.default_memory_space>
-// CHECK:             linalg.yield [[VAR_22_4_]] : !ptr.ptr<#tptr.default_memory_space>
+// CHECK:           %[[GENERIC_4:.*]] = linalg.generic {indexing_maps = [#[[$ATTR_0]], #[[$ATTR_0]]], iterator_types = ["parallel"]} ins(%[[GENERIC_3]] : tensor<16xi64>) outs(%[[EMPTY_1]] : tensor<16x!ptr.ptr<#tptr.default_memory_space>>) {
+// CHECK:           ^bb0(%[[VAL_8:.*]]: i64, %[[VAL_9:.*]]: !ptr.ptr<#tptr.default_memory_space>):
+// CHECK:             %[[INTTOPTR_0:.*]] = tptr.inttoptr %[[VAL_8]] : i64 to <#tptr.default_memory_space>
+// CHECK:             linalg.yield %[[INTTOPTR_0]] : !ptr.ptr<#tptr.default_memory_space>
 // CHECK:           } -> tensor<16x!ptr.ptr<#tptr.default_memory_space>>
-// CHECK:           [[VAR_14_:%.+]] = linalg.generic {indexing_maps = [#map, #map], iterator_types = ["parallel"]} ins([[VAR_13_]] : tensor<16x!ptr.ptr<#tptr.default_memory_space>>) outs([[VAR_4_]] : tensor<16xi32>) {
-// CHECK:           ^bb0([[IN_10_:%.+]]: !ptr.ptr<#tptr.default_memory_space>, [[IN_11_:%.+]]: i32):
-// CHECK:             [[VAR_22_5_:%.+]] = tptr.to_memref [[IN_10_]] : <#tptr.default_memory_space> to memref<1xi32>
-// CHECK:             [[VAR_23_1_1_:%.+]] = memref.load [[VAR_22_5_]]{{.}}[[CST_0_]]{{.}} : memref<1xi32>
-// CHECK:             linalg.yield [[VAR_23_1_1_]] : i32
+// CHECK:           %[[GENERIC_5:.*]] = linalg.generic {indexing_maps = [#[[$ATTR_0]], #[[$ATTR_0]]], iterator_types = ["parallel"]} ins(%[[GENERIC_4]] : tensor<16x!ptr.ptr<#tptr.default_memory_space>>) outs(%[[EMPTY_0]] : tensor<16xi32>) {
+// CHECK:           ^bb0(%[[VAL_10:.*]]: !ptr.ptr<#tptr.default_memory_space>, %[[VAL_11:.*]]: i32):
+// CHECK:             %[[FROM_PTR_1:.*]] = ptr.from_ptr %[[VAL_10]] : <#tptr.default_memory_space> -> memref<1xi32, #tptr.default_memory_space>
+// CHECK:             %[[LOAD_1:.*]] = memref.load %[[FROM_PTR_1]]{{\[}}%[[CONSTANT_0]]] : memref<1xi32, #tptr.default_memory_space>
+// CHECK:             linalg.yield %[[LOAD_1]] : i32
 // CHECK:           } -> tensor<16xi32>
-// CHECK:           [[VAR_15_:%.+]] = linalg.fill ins([[VAR_2_]] : !ptr.ptr<#tptr.default_memory_space>) outs([[VAR_7_]] : tensor<16x!ptr.ptr<#tptr.default_memory_space>>) -> tensor<16x!ptr.ptr<#tptr.default_memory_space>>
-// CHECK:           [[VAR_16_:%.+]] = linalg.generic {indexing_maps = [#map, #map, #map], iterator_types = ["parallel"]} ins([[VAR_15_]], [[VAR_6_]] : tensor<16x!ptr.ptr<#tptr.default_memory_space>>, tensor<16xi32>) outs([[VAR_15_]] : tensor<16x!ptr.ptr<#tptr.default_memory_space>>) {
-// CHECK:           ^bb0([[IN_12_:%.+]]: !ptr.ptr<#tptr.default_memory_space>, [[IN_13_:%.+]]: i32, [[IN_14_:%.+]]: !ptr.ptr<#tptr.default_memory_space>):
-// CHECK:             [[VAR_22_6_:%.+]] = arith.muli [[IN_13_]], [[VAR_1_]] : i32
-// CHECK:             [[VAR_23_2_:%.+]] = tptr.ptradd [[IN_12_]] [[VAR_22_6_]] : <#tptr.default_memory_space>, i32 to <#tptr.default_memory_space>
-// CHECK:             linalg.yield [[VAR_23_2_]] : !ptr.ptr<#tptr.default_memory_space>
+// CHECK:           %[[FILL_2:.*]] = linalg.fill ins(%[[UNREALIZED_CONVERSION_CAST_0]] : !ptr.ptr<#tptr.default_memory_space>) outs(%[[EMPTY_1]] : tensor<16x!ptr.ptr<#tptr.default_memory_space>>) -> tensor<16x!ptr.ptr<#tptr.default_memory_space>>
+// CHECK:           %[[GENERIC_6:.*]] = linalg.generic {indexing_maps = [#[[$ATTR_0]], #[[$ATTR_0]], #[[$ATTR_0]]], iterator_types = ["parallel"]} ins(%[[FILL_2]], %[[GENERIC_0]] : tensor<16x!ptr.ptr<#tptr.default_memory_space>>, tensor<16xi32>) outs(%[[FILL_2]] : tensor<16x!ptr.ptr<#tptr.default_memory_space>>) {
+// CHECK:           ^bb0(%[[VAL_12:.*]]: !ptr.ptr<#tptr.default_memory_space>, %[[VAL_13:.*]]: i32, %[[VAL_14:.*]]: !ptr.ptr<#tptr.default_memory_space>):
+// CHECK:             %[[TYPE_OFFSET_1:.*]] = ptr.type_offset i32 : i32
+// CHECK:             %[[MULI_1:.*]] = arith.muli %[[VAL_13]], %[[TYPE_OFFSET_1]] : i32
+// CHECK:             %[[PTR_ADD_1:.*]] = ptr.ptr_add %[[VAL_12]], %[[MULI_1]] : !ptr.ptr<#tptr.default_memory_space>, i32
+// CHECK:             linalg.yield %[[PTR_ADD_1]] : !ptr.ptr<#tptr.default_memory_space>
 // CHECK:           } -> tensor<16x!ptr.ptr<#tptr.default_memory_space>>
-// CHECK:           [[VAR_17_:%.+]] = linalg.generic {indexing_maps = [#map, #map], iterator_types = ["parallel"]} ins([[VAR_16_]] : tensor<16x!ptr.ptr<#tptr.default_memory_space>>) outs([[VAR_11_]] : tensor<16xi64>) {
-// CHECK:           ^bb0([[IN_15_:%.+]]: !ptr.ptr<#tptr.default_memory_space>, [[IN_16_:%.+]]: i64):
-// CHECK:             [[VAR_22_7_:%.+]] = tptr.ptrtoint [[IN_15_]] : <#tptr.default_memory_space> to i64
-// CHECK:             linalg.yield [[VAR_22_7_]] : i64
+// CHECK:           %[[GENERIC_7:.*]] = linalg.generic {indexing_maps = [#[[$ATTR_0]], #[[$ATTR_0]]], iterator_types = ["parallel"]} ins(%[[GENERIC_6]] : tensor<16x!ptr.ptr<#tptr.default_memory_space>>) outs(%[[EMPTY_2]] : tensor<16xi64>) {
+// CHECK:           ^bb0(%[[VAL_15:.*]]: !ptr.ptr<#tptr.default_memory_space>, %[[VAL_16:.*]]: i64):
+// CHECK:             %[[PTRTOINT_0:.*]] = tptr.ptrtoint %[[VAL_15]] : <#tptr.default_memory_space> to i64
+// CHECK:             linalg.yield %[[PTRTOINT_0]] : i64
 // CHECK:           } -> tensor<16xi64>
-// CHECK:           [[VAR_18_:%.+]] = linalg.generic {indexing_maps = [#map, #map], iterator_types = ["parallel"]} ins([[VAR_14_]] : tensor<16xi32>) outs([[VAR_11_]] : tensor<16xi64>) {
-// CHECK:           ^bb0([[IN_17_:%.+]]: i32, [[IN_18_:%.+]]: i64):
-// CHECK:             [[VAR_22_8_:%.+]] = arith.extsi [[IN_17_]] : i32 to i64
-// CHECK:             linalg.yield [[VAR_22_8_]] : i64
+// CHECK:           %[[GENERIC_8:.*]] = linalg.generic {indexing_maps = [#[[$ATTR_0]], #[[$ATTR_0]]], iterator_types = ["parallel"]} ins(%[[GENERIC_5]] : tensor<16xi32>) outs(%[[EMPTY_2]] : tensor<16xi64>) {
+// CHECK:           ^bb0(%[[VAL_17:.*]]: i32, %[[VAL_18:.*]]: i64):
+// CHECK:             %[[EXTSI_1:.*]] = arith.extsi %[[VAL_17]] : i32 to i64
+// CHECK:             linalg.yield %[[EXTSI_1]] : i64
 // CHECK:           } -> tensor<16xi64>
-// CHECK:           [[VAR_19_:%.+]] = linalg.generic {indexing_maps = [#map, #map, #map], iterator_types = ["parallel"]} ins([[VAR_17_]], [[VAR_18_]] : tensor<16xi64>, tensor<16xi64>) outs([[VAR_17_]] : tensor<16xi64>) {
-// CHECK:           ^bb0([[IN_19_:%.+]]: i64, [[IN_20_:%.+]]: i64, [[IN_21_:%.+]]: i64):
-// CHECK:             [[VAR_22_9_:%.+]] = arith.addi [[IN_19_]], [[IN_20_]] : i64
-// CHECK:             linalg.yield [[VAR_22_9_]] : i64
+// CHECK:           %[[GENERIC_9:.*]] = linalg.generic {indexing_maps = [#[[$ATTR_0]], #[[$ATTR_0]], #[[$ATTR_0]]], iterator_types = ["parallel"]} ins(%[[GENERIC_7]], %[[GENERIC_8]] : tensor<16xi64>, tensor<16xi64>) outs(%[[GENERIC_7]] : tensor<16xi64>) {
+// CHECK:           ^bb0(%[[VAL_19:.*]]: i64, %[[VAL_20:.*]]: i64, %[[VAL_21:.*]]: i64):
+// CHECK:             %[[ADDI_0:.*]] = arith.addi %[[VAL_19]], %[[VAL_20]] : i64
+// CHECK:             linalg.yield %[[ADDI_0]] : i64
 // CHECK:           } -> tensor<16xi64>
-// CHECK:           [[VAR_20_:%.+]] = linalg.generic {indexing_maps = [#map, #map, #map], iterator_types = ["parallel"]} ins([[VAR_16_]], [[VAR_5_]] : tensor<16x!ptr.ptr<#tptr.default_memory_space>>, tensor<16xi32>) outs([[VAR_16_]] : tensor<16x!ptr.ptr<#tptr.default_memory_space>>) {
-// CHECK:           ^bb0([[IN_22_:%.+]]: !ptr.ptr<#tptr.default_memory_space>, [[IN_23_:%.+]]: i32, [[IN_24_:%.+]]: !ptr.ptr<#tptr.default_memory_space>):
-// CHECK:             [[VAR_22_10_:%.+]] = arith.muli [[IN_23_]], [[VAR_0_]] : i32
-// CHECK:             [[VAR_23_3_:%.+]] = tptr.ptradd [[IN_22_]] [[VAR_22_10_]] : <#tptr.default_memory_space>, i32 to <#tptr.default_memory_space>
-// CHECK:             linalg.yield [[VAR_23_3_]] : !ptr.ptr<#tptr.default_memory_space>
+// CHECK:           %[[GENERIC_10:.*]] = linalg.generic {indexing_maps = [#[[$ATTR_0]], #[[$ATTR_0]], #[[$ATTR_0]]], iterator_types = ["parallel"]} ins(%[[GENERIC_6]], %[[FILL_0]] : tensor<16x!ptr.ptr<#tptr.default_memory_space>>, tensor<16xi32>) outs(%[[GENERIC_6]] : tensor<16x!ptr.ptr<#tptr.default_memory_space>>) {
+// CHECK:           ^bb0(%[[VAL_22:.*]]: !ptr.ptr<#tptr.default_memory_space>, %[[VAL_23:.*]]: i32, %[[VAL_24:.*]]: !ptr.ptr<#tptr.default_memory_space>):
+// CHECK:             %[[TYPE_OFFSET_2:.*]] = ptr.type_offset i64 : i32
+// CHECK:             %[[MULI_2:.*]] = arith.muli %[[VAL_23]], %[[TYPE_OFFSET_2]] : i32
+// CHECK:             %[[PTR_ADD_2:.*]] = ptr.ptr_add %[[VAL_22]], %[[MULI_2]] : !ptr.ptr<#tptr.default_memory_space>, i32
+// CHECK:             linalg.yield %[[PTR_ADD_2]] : !ptr.ptr<#tptr.default_memory_space>
 // CHECK:           } -> tensor<16x!ptr.ptr<#tptr.default_memory_space>>
-// CHECK:           [[VAR_21_:%.+]] = linalg.generic {indexing_maps = [#map, #map], iterator_types = ["parallel"]} ins([[VAR_19_]] : tensor<16xi64>) outs([[VAR_4_]] : tensor<16xi32>) {
-// CHECK:           ^bb0([[IN_25_:%.+]]: i64, [[IN_26_:%.+]]: i32):
-// CHECK:             [[VAR_22_11_:%.+]] = arith.trunci [[IN_25_]] : i64 to i32
-// CHECK:             linalg.yield [[VAR_22_11_]] : i32
+// CHECK:           %[[GENERIC_11:.*]] = linalg.generic {indexing_maps = [#[[$ATTR_0]], #[[$ATTR_0]]], iterator_types = ["parallel"]} ins(%[[GENERIC_9]] : tensor<16xi64>) outs(%[[EMPTY_0]] : tensor<16xi32>) {
+// CHECK:           ^bb0(%[[VAL_25:.*]]: i64, %[[VAL_26:.*]]: i32):
+// CHECK:             %[[TRUNCI_0:.*]] = arith.trunci %[[VAL_25]] : i64 to i32
+// CHECK:             linalg.yield %[[TRUNCI_0]] : i32
 // CHECK:           } -> tensor<16xi32>
-// CHECK:           linalg.generic {indexing_maps = [#map, #map], iterator_types = ["parallel"]} ins([[VAR_20_]], [[VAR_21_]] : tensor<16x!ptr.ptr<#tptr.default_memory_space>>, tensor<16xi32>) {
-// CHECK:           ^bb0([[IN_27_:%.+]]: !ptr.ptr<#tptr.default_memory_space>, [[IN_28_:%.+]]: i32):
-// CHECK:             [[VAR_22_12_:%.+]] = tptr.to_memref [[IN_27_]] : <#tptr.default_memory_space> to memref<1xi32>
-// CHECK:             memref.store [[IN_28_]], [[VAR_22_12_]]{{.}}[[CST_0_]]{{.}} : memref<1xi32>
+// CHECK:           linalg.generic {indexing_maps = [#[[$ATTR_0]], #[[$ATTR_0]]], iterator_types = ["parallel"]} ins(%[[GENERIC_10]], %[[GENERIC_11]] : tensor<16x!ptr.ptr<#tptr.default_memory_space>>, tensor<16xi32>) {
+// CHECK:           ^bb0(%[[VAL_27:.*]]: !ptr.ptr<#tptr.default_memory_space>, %[[VAL_28:.*]]: i32):
+// CHECK:             %[[FROM_PTR_2:.*]] = ptr.from_ptr %[[VAL_27]] : <#tptr.default_memory_space> -> memref<1xi32, #tptr.default_memory_space>
+// CHECK:             memref.store %[[VAL_28]], %[[FROM_PTR_2]]{{\[}}%[[CONSTANT_0]]] : memref<1xi32, #tptr.default_memory_space>
 // CHECK:             linalg.yield
 // CHECK:           }
 // CHECK:           return

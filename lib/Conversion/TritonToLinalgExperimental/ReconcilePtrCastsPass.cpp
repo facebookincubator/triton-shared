@@ -16,6 +16,7 @@
 
 #include "mlir/Conversion/ReconcileUnrealizedCasts/ReconcileUnrealizedCasts.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/Ptr/IR/PtrOps.h"
 #include "mlir/Dialect/Ptr/IR/PtrTypes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinDialect.h"
@@ -89,15 +90,18 @@ struct FromMemrefConverter
     if (unrankedInput && isa<triton::PointerType, ptr::PtrType>(outType)) {
       // from_memref only takes ranked memref, cast the unranked memref to
       // ranked memref first.
-      auto rankedMemref = memref::CastOp::create(
+      auto memSpace = tptr::DefaultMemorySpaceAttr::get(rewriter.getContext());
+      Value rankedMemref = memref::CastOp::create(
           rewriter, op.getLoc(),
           MemRefType::get({1}, unrankedInput.getElementType()), input);
-      auto memrefToPtr = tptr::FromMemrefOp::create(
-          rewriter, op->getLoc(),
-          ptr::PtrType::get(
-              rewriter.getContext(),
-              tptr::DefaultMemorySpaceAttr::get(rewriter.getContext())),
+      rankedMemref = memref::MemorySpaceCastOp::create(
+          rewriter, op.getLoc(),
+          MemRefType::get({1}, unrankedInput.getElementType(),
+                          MemRefLayoutAttrInterface{}, memSpace),
           rankedMemref);
+      auto memrefToPtr = ptr::ToPtrOp::create(
+          rewriter, op->getLoc(),
+          ptr::PtrType::get(rewriter.getContext(), memSpace), rankedMemref);
 
       rewriter.replaceAllUsesWith(output, memrefToPtr);
       rewriter.eraseOp(op);
@@ -127,8 +131,20 @@ struct ToMemrefConverter : public OpRewritePattern<UnrealizedConversionCastOp> {
       // to_memref can only cast to ranked static shape memref, we have to cast
       // the resulting memref back to unranked
       auto elemType = outUnrankedMemrefType.getElementType();
-      auto ptrToMemref = tptr::ToMemrefOp::create(
-          rewriter, op->getLoc(), MemRefType::get({1}, elemType), input);
+      mlir::Attribute memSpace =
+          tptr::DefaultMemorySpaceAttr::get(rewriter.getContext());
+      if (auto ptrType = dyn_cast<ptr::PtrType>(inType)) {
+        memSpace = ptrType.getMemorySpace();
+      }
+      Value ptrToMemref = ptr::FromPtrOp::create(
+          rewriter, op->getLoc(),
+          MemRefType::get({1}, elemType, MemRefLayoutAttrInterface{}, memSpace),
+          input);
+      ptrToMemref = memref::MemorySpaceCastOp::create(
+          rewriter, op->getLoc(),
+          MemRefType::get({1}, elemType, MemRefLayoutAttrInterface{},
+                          outUnrankedMemrefType.getMemorySpace()),
+          ptrToMemref);
 
       SmallVector<OpFoldResult> sizes = {rewriter.getIndexAttr(1)};
       SmallVector<OpFoldResult> newStrides = {rewriter.getIndexAttr(1)};
@@ -151,7 +167,8 @@ class ReconcilePtrCastsPass
 
 public:
   void getDependentDialects(DialectRegistry &registry) const override {
-    registry.insert<tptr::TPtrDialect, memref::MemRefDialect, BuiltinDialect>();
+    registry.insert<tptr::TPtrDialect, ptr::PtrDialect, memref::MemRefDialect,
+                    BuiltinDialect>();
   }
 
   void runOnOperation() override {

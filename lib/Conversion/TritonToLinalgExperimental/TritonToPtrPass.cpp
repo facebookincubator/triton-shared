@@ -24,6 +24,7 @@
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/Ptr/IR/PtrDialect.h"
+#include "mlir/Dialect/Ptr/IR/PtrOps.h"
 #include "mlir/Dialect/Ptr/IR/PtrTypes.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/SCF/Transforms/Patterns.h"
@@ -180,12 +181,12 @@ struct AddPtrConverter : public OpConversionPattern<triton::AddPtrOp> {
     }
     auto loc = op->getLoc();
     auto pointeeType = cast<triton::PointerType>(op.getType()).getPointeeType();
-    auto offsetType = op.getOffset().getType();
+    auto offsetType = adaptor.getOffset().getType();
     auto pointeeSizeInBytes =
-        tptr::TypeOffsetOp::create(rewriter, loc, offsetType, pointeeType);
-    auto scaledOffset = arith::MulIOp::create(rewriter, loc, op.getOffset(),
-                                              pointeeSizeInBytes);
-    rewriter.replaceOpWithNewOp<tptr::PtrAddOp>(
+        ptr::TypeOffsetOp::create(rewriter, loc, offsetType, pointeeType);
+    auto scaledOffset = arith::MulIOp::create(
+        rewriter, loc, adaptor.getOffset(), pointeeSizeInBytes);
+    auto dddd = rewriter.replaceOpWithNewOp<ptr::PtrAddOp>(
         op,
         ptr::PtrType::get(
             rewriter.getContext(),
@@ -213,10 +214,12 @@ struct LoadConverter : public OpConversionPattern<triton::LoadOp> {
     auto ptr = op.getPtr();
     auto pointeeType =
         cast<triton::PointerType>(ptr.getType()).getPointeeType();
-
-    auto memref = tptr::ToMemrefOp::create(rewriter, op->getLoc(),
-                                           MemRefType::get({1}, pointeeType),
-                                           adaptor.getPtr());
+    auto ptrType = cast<ptr::PtrType>(adaptor.getPtr().getType());
+    auto memref = ptr::FromPtrOp::create(
+        rewriter, op->getLoc(),
+        MemRefType::get({1}, pointeeType, MemRefLayoutAttrInterface{},
+                        ptrType.getMemorySpace()),
+        adaptor.getPtr());
 
     auto zero = arith::ConstantIndexOp::create(rewriter, op.getLoc(), 0);
 
@@ -278,10 +281,12 @@ struct StoreConverter : public OpConversionPattern<triton::StoreOp> {
       rewriter.setInsertionPointToStart(
           &ifOp.getThenRegion().getBlocks().front());
     }
-
-    auto memref = tptr::ToMemrefOp::create(rewriter, op->getLoc(),
-                                           MemRefType::get({1}, pointeeType),
-                                           adaptor.getPtr());
+    auto ptrType = cast<ptr::PtrType>(adaptor.getPtr().getType());
+    auto memref = ptr::FromPtrOp::create(
+        rewriter, op->getLoc(),
+        MemRefType::get({1}, pointeeType, MemRefLayoutAttrInterface{},
+                        ptrType.getMemorySpace()),
+        adaptor.getPtr());
     auto zero = arith::ConstantIndexOp::create(rewriter, op.getLoc(), 0);
 
     memref::StoreOp::create(rewriter, op->getLoc(), op.getValue(), memref,
@@ -483,7 +488,8 @@ public:
 
     target.addLegalDialect<arith::ArithDialect, linalg::LinalgDialect,
                            tensor::TensorDialect, affine::AffineDialect,
-                           tptr::TPtrDialect, memref::MemRefDialect>();
+                           tptr::TPtrDialect, ptr::PtrDialect,
+                           memref::MemRefDialect>();
 
     patterns
         .add<AddPtrConverter, BitCastConverter, StoreConverter, LoadConverter,

@@ -72,9 +72,9 @@ class StructuredToMemrefPass
 public:
   void getDependentDialects(DialectRegistry &registry) const override {
     registry
-        .insert<tptr::TPtrDialect, func::FuncDialect, arith::ArithDialect,
-                math::MathDialect, linalg::LinalgDialect, affine::AffineDialect,
-                scf::SCFDialect, tensor::TensorDialect,
+        .insert<tptr::TPtrDialect, ptr::PtrDialect, func::FuncDialect,
+                arith::ArithDialect, math::MathDialect, linalg::LinalgDialect,
+                affine::AffineDialect, scf::SCFDialect, tensor::TensorDialect,
                 bufferization::BufferizationDialect, triton::TritonDialect,
                 ttx::TritonTilingExtDialect, memref::MemRefDialect>();
   }

@@ -30,9 +30,9 @@ module {
 
 // CHECK:  linalg.generic
 // CHECK:  ^bb0(%in: !ptr.ptr<#tptr.default_memory_space>, %in_0: i1, %out: i32):
-// CHECK:    [[MEMREF:%.+]] = tptr.to_memref %in : <#tptr.default_memory_space> to memref<1xi32>
+// CHECK:    [[MEMREF:%.+]] = ptr.from_ptr %in : <#tptr.default_memory_space> -> memref<1xi32, #tptr.default_memory_space>
 // CHECK:    [[SCF_IF:%.+]] = scf.if %in_0 -> (i32) {
-// CHECK:      [[LOAD:%.+]] = memref.load [[MEMREF]][%c0] : memref<1xi32>
+// CHECK:      [[LOAD:%.+]] = memref.load [[MEMREF]][%c0] : memref<1xi32, #tptr.default_memory_space>
 // CHECK:      scf.yield [[LOAD]] : i32
 // CHECK:    } else {
 // CHECK:      scf.yield %c0_i32 : i32
@@ -43,8 +43,8 @@ module {
 // CHECK:  linalg.generic
 // CHECK:  ^bb0(%in: !ptr.ptr<#tptr.default_memory_space>, %in_0: i32, %in_1: i1):
 // CHECK:    scf.if %in_1 {
-// CHECK:      [[MEMREF:%.+]] = tptr.to_memref %in : <#tptr.default_memory_space> to memref<1xi32>
-// CHECK:      memref.store %in_0, [[MEMREF]][%c0] : memref<1xi32>
+// CHECK:      [[MEMREF:%.+]] = ptr.from_ptr %in : <#tptr.default_memory_space> -> memref<1xi32, #tptr.default_memory_space>
+// CHECK:      memref.store %in_0, [[MEMREF]][%c0] : memref<1xi32, #tptr.default_memory_space>
 // CHECK:    }
 // CHECK:    linalg.yield
 // CHECK:  }
