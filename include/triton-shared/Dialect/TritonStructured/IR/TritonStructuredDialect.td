@@ -10,6 +10,7 @@
 
 include "mlir/IR/OpBase.td"
 include "triton/Dialect/Triton/IR/TritonTypes.td"
+include "triton/Dialect/Triton/IR/TritonAttrDefs.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
 def Triton_Structured_Dialect : Dialect {
@@ -301,6 +302,33 @@ def TTS_ScatterOp : TTS_Op<"scatter", [
   let assemblyFormat = [{
     $value `into` $ptr `[` $offset `]` (`mask` `=` $mask^)?
     attr-dict `:` type($value) `into` ` ` `(` type($ptr) `,` type($offset) `)`
+  }];
+}
+
+def TTS_AtomicRMWOp : TTS_Op<"atomic_rmw", [
+  MemoryEffects<[MemRead, MemWrite]>,
+  OptionalTypesMatchWith<"mask type matches offset type", "offset", "mask",
+                 "triton::getI1SameShape($_self)">
+]> {
+  let summary = "atomic read-modify-write on a base pointer with a tensor of offsets";
+
+  let arguments = (
+    ins
+    TT_Ptr:$ptr,
+    TT_IntLike:$offset,
+    TT_Type:$value,
+    Optional<TT_BoolLike>:$mask,
+    TT_AtomicRMWAttr:$atomic_rmw_op,
+    TT_MemSemanticAttr:$sem,
+    TT_MemSyncScopeAttr:$scope
+  );
+
+  let results = (outs TT_Type:$result);
+
+  let assemblyFormat = [{
+    $atomic_rmw_op `,` $sem `,` $scope `,` $ptr `[` $offset `]` `,` $value
+    (`mask` `=` $mask^)?
+    attr-dict `:` `(` type($ptr) `,` type($offset) `,` type($value) `)` `->` type($result)
   }];
 }
 
