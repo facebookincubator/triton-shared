@@ -376,6 +376,137 @@ struct ScatterConverter : public OpConversionPattern<tts::ScatterOp> {
   }
 };
 
+// Lowering tts.atomic_rmw to linalg.generic { memref.atomic_rmw }.
+struct AtomicRMWConverter : public OpConversionPattern<tts::AtomicRMWOp> {
+  using OpConversionPattern<tts::AtomicRMWOp>::OpConversionPattern;
+
+  AtomicRMWConverter(const TypeConverter &typeConverter, MLIRContext *context)
+      : OpConversionPattern<tts::AtomicRMWOp>(typeConverter, context) {}
+
+  AtomicRMWConverter(MLIRContext *context)
+      : OpConversionPattern<tts::AtomicRMWOp>(context) {}
+
+  /// Map triton::RMWOp to arith::AtomicRMWKind.
+  static arith::AtomicRMWKind convertRMWKind(triton::RMWOp rmwOp) {
+    switch (rmwOp) {
+    case triton::RMWOp::FADD:  return arith::AtomicRMWKind::addf;
+    case triton::RMWOp::ADD:   return arith::AtomicRMWKind::addi;
+    case triton::RMWOp::MAX:   return arith::AtomicRMWKind::maxs;
+    case triton::RMWOp::MIN:   return arith::AtomicRMWKind::mins;
+    case triton::RMWOp::UMAX:  return arith::AtomicRMWKind::maxu;
+    case triton::RMWOp::UMIN:  return arith::AtomicRMWKind::minu;
+    case triton::RMWOp::AND:   return arith::AtomicRMWKind::andi;
+    case triton::RMWOp::OR:    return arith::AtomicRMWKind::ori;
+    case triton::RMWOp::XOR:   return arith::AtomicRMWKind::xori;
+    case triton::RMWOp::XCHG:  return arith::AtomicRMWKind::assign;
+    }
+    llvm_unreachable("Unknown triton::RMWOp");
+  }
+
+  LogicalResult
+  matchAndRewrite(tts::AtomicRMWOp atomicOp, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto loc = atomicOp->getLoc();
+
+    auto ptr = adaptor.getPtr();
+    auto offsetTensor = adaptor.getOffset();
+    auto valueTensor = adaptor.getValue();
+    auto offsetType = dyn_cast<ShapedType>(offsetTensor.getType());
+
+    // Must be a tensor (not scalar) offset.
+    if (!offsetType)
+      return failure();
+
+    auto valueType =
+        dyn_cast<RankedTensorType>(atomicOp.getValue().getType());
+    if (!valueType)
+      return failure();
+
+    // Treat the base pointer (memref) as 1D because the offsets are all
+    // relative to a single base pointer (already collapsed).
+    auto baseMemref =
+        memref::CastOp::create(
+            rewriter, loc,
+            MemRefType::get({ShapedType::kDynamic},
+                            valueType.getElementType()),
+            ptr)
+            .getResult();
+
+    // Build linalg.generic inputs: [offsets, values, (mask)?].
+    SmallVector<Value> inputs{offsetTensor, valueTensor};
+    if (atomicOp.getMask())
+      inputs.push_back(atomicOp.getMask());
+
+    // Affine maps for the inputs and one output.
+    SmallVector<AffineMap> affineMaps(
+        inputs.size() + 1,
+        rewriter.getMultiDimIdentityMap(valueType.getRank()));
+
+    SmallVector<utils::IteratorType> iteratorTypes(
+        valueType.getRank(), utils::IteratorType::parallel);
+
+    // Output tensor carries the old values returned by atomic_rmw.
+    auto resultType =
+        cast<RankedTensorType>(atomicOp.getResult().getType());
+    Value emptyTensor =
+        tensor::EmptyOp::create(rewriter, loc, resultType.getShape(),
+                                resultType.getElementType())
+            .getResult();
+
+    arith::AtomicRMWKind kind = convertRMWKind(atomicOp.getAtomicRmwOp());
+
+    auto genericOp = linalg::GenericOp::create(
+        rewriter, loc, TypeRange{resultType}, inputs, ValueRange{emptyTensor},
+        affineMaps, iteratorTypes,
+        [&](OpBuilder &b, Location loc, ValueRange args) {
+          auto storeAtomicAtIndex = [&baseMemref, kind](
+                                        OpBuilder &b, Location loc,
+                                        Value index, Value value) -> Value {
+            Value index0 =
+                arith::IndexCastOp::create(b, loc, b.getIndexType(), index);
+            return memref::AtomicRMWOp::create(b, loc, kind, value, baseMemref,
+                                               ValueRange{index0})
+                .getResult();
+          };
+
+          auto offset = args[0];
+          auto value = args[1];
+
+          if (!atomicOp.getMask()) {
+            // No mask: always perform the atomic and yield the old value.
+            Value oldVal = storeAtomicAtIndex(b, loc, offset, value);
+            linalg::YieldOp::create(b, loc, oldVal);
+          } else {
+            // With mask: only perform the atomic when mask is true.
+            auto mask = args[2];
+            auto passThru = args[inputs.size()]; // output iter arg
+            auto ifOp = scf::IfOp::create(
+                b, loc, TypeRange{resultType.getElementType()}, mask,
+                /*withElseRegion=*/true);
+
+            // Then block: perform the atomic and yield the old value.
+            {
+              OpBuilder::InsertionGuard guard(b);
+              b.setInsertionPointToEnd(&ifOp.getThenRegion().front());
+              Value oldVal = storeAtomicAtIndex(b, loc, offset, value);
+              scf::YieldOp::create(b, loc, oldVal);
+            }
+            // Else block: yield the pass-through value unchanged.
+            {
+              OpBuilder::InsertionGuard guard(b);
+              b.setInsertionPointToEnd(&ifOp.getElseRegion().front());
+              scf::YieldOp::create(b, loc, passThru);
+            }
+
+            linalg::YieldOp::create(b, loc, ifOp.getResult(0));
+          }
+        });
+
+    rewriter.replaceOp(atomicOp, genericOp.getResult(0));
+    return success();
+  }
+};
+
 class UnstructuredToMemrefPass
     : public ::impl::UnstructuredToMemrefBase<UnstructuredToMemrefPass> {
 
@@ -401,12 +532,13 @@ public:
         bufferization::BufferizationDialect, memref::MemRefDialect,
         ttx::TritonTilingExtDialect>();
 
-    target.addIllegalOp<tts::GatherOp, tts::ScatterOp>();
+    target.addIllegalOp<tts::GatherOp, tts::ScatterOp, tts::AtomicRMWOp>();
 
     PtrToUnrankedMemrefConverter typeConverter;
 
-    patterns.add<GatherConverter, ScatterConverter, ScalarLoadConverter,
-                 ScalarStoreConverter>(typeConverter, patterns.getContext());
+    patterns.add<GatherConverter, ScatterConverter, AtomicRMWConverter,
+                 ScalarLoadConverter, ScalarStoreConverter>(
+        typeConverter, patterns.getContext());
 
     if (failed(applyPartialConversion(moduleOp, target, std::move(patterns))))
       signalPassFailure();
