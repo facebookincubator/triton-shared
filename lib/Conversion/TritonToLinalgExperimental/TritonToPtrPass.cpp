@@ -404,18 +404,18 @@ struct LinalgYieldConverter : public OpConversionPattern<linalg::YieldOp> {
 
 // Convert linalg.fill to use !ptr.ptr. linalg.fill on triton pointer is lowered
 // from tt.splat on a triton pointer.
-struct LinalgFillPtrConverter : public OpConversionPattern<linalg::FillOp> {
-  using OpConversionPattern<linalg::FillOp>::OpConversionPattern;
+struct LinalgFillPtrConverter : public OpConversionPattern<tensor::SplatOp> {
+  using OpConversionPattern<tensor::SplatOp>::OpConversionPattern;
 
   LinalgFillPtrConverter(const TypeConverter &typeConverter,
                          MLIRContext *context)
-      : OpConversionPattern<linalg::FillOp>(typeConverter, context) {}
+      : OpConversionPattern<tensor::SplatOp>(typeConverter, context) {}
 
   LogicalResult
-  matchAndRewrite(linalg::FillOp op, OpAdaptor adaptor,
+  matchAndRewrite(tensor::SplatOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<linalg::FillOp>(op, adaptor.getInputs(),
-                                                adaptor.getOutputs());
+    rewriter.replaceOpWithNewOp<tensor::SplatOp>(
+        op, typeConverter->convertType(op.getType()), adaptor.getInput());
     return success();
   }
 };
@@ -471,14 +471,11 @@ public:
     // We do not want to lower triton load and store on block pointers
     target.addDynamicallyLegalOp<triton::LoadOp, triton::StoreOp>([](auto op) {
       auto ptrType = op->getOperand(0).getType();
-      if (triton::isTensorPointerType(ptrType)) {
-        return true;
-      }
       return !triton::isPtrTypeLike(ptrType);
     });
 
     target.addDynamicallyLegalOp<
-        linalg::FillOp, linalg::GenericOp, linalg::YieldOp, tensor::EmptyOp,
+        tensor::SplatOp, linalg::GenericOp, linalg::YieldOp, tensor::EmptyOp,
         tensor::ExpandShapeOp, tensor::InsertSliceOp, arith::SelectOp>(
         [](auto op) {
           return llvm::all_of(

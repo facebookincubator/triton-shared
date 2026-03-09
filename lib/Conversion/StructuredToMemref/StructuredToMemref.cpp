@@ -65,21 +65,14 @@ static Type getElementTypeStructuredPtr(tts::MakeTensorPtrOp op) {
   return ptrType.getPointeeType();
 }
 
-static Type getElementTypeBlockPtr(tts::MakeTensorPtrOp op) {
-  assert(op.isBlockPtr());
-  // !tt.ptr<tensor<128x64xbf16>, 1>
-  auto shapedType = cast<ShapedType>(
-      cast<triton::PointerType>(op.getType()).getPointeeType());
-  return shapedType.getElementType();
-}
-
 static MemRefType getResultMemrefType(tts::MakeTensorPtrOp op, int64_t offset,
                                       ArrayRef<int64_t> staticStrides,
                                       ArrayRef<int64_t> resultShape) {
   auto layout = StridedLayoutAttr::get(op.getContext(), offset, staticStrides);
   Type elemType;
   if (op.isBlockPtr()) {
-    elemType = getElementTypeBlockPtr(op);
+    elemType = nullptr;
+    llvm_unreachable("Unexpected op type!");
   } else {
     elemType = getElementTypeStructuredPtr(op);
   }
@@ -92,11 +85,11 @@ static MemRefType getResultMemrefType(tts::MakeGatherScatterTensorPtrOp op,
                                       ArrayRef<int64_t> resultShape) {
   auto layout = StridedLayoutAttr::get(op.getContext(), offset, staticStrides);
 
-  auto ptrType = cast<triton::PointerType>(op.getType());
+  auto ptrType = cast<triton::PointerType>(
+      cast<RankedTensorType>(op.getType()).getElementType());
   Type elemType = ptrType.getPointeeType();
 
-  Type realEltTy = cast<RankedTensorType>(elemType).getElementType();
-  return MemRefType::get(resultShape, realEltTy, layout);
+  return MemRefType::get(resultShape, elemType, layout);
 }
 
 // If there are dimensions with size 1 and stride 0, replace 0 stride with
@@ -236,14 +229,6 @@ private:
     return ptrType.getPointeeType();
   }
 
-  static Type getElementTypeBlockPtr(tts::MakeTensorPtrOp op) {
-    assert(op.isBlockPtr());
-    // !tt.ptr<tensor<128x64xbf16>, 1>
-    auto shapedType = cast<ShapedType>(
-        cast<triton::PointerType>(op.getType()).getPointeeType());
-    return shapedType.getElementType();
-  }
-
   static MemRefType getResultMemrefType(tts::MakeTensorPtrOp op, int64_t offset,
                                         ArrayRef<int64_t> staticStrides,
                                         ArrayRef<int64_t> resultShape) {
@@ -251,7 +236,8 @@ private:
         StridedLayoutAttr::get(op.getContext(), offset, staticStrides);
     Type elemType;
     if (op.isBlockPtr()) {
-      elemType = getElementTypeBlockPtr(op);
+      elemType = nullptr;
+      llvm_unreachable("Unexpected op type!");
     } else {
       elemType = getElementTypeStructuredPtr(op);
     }
@@ -554,18 +540,6 @@ private:
     return rewritePtr(resultShape, false, op, adaptor, rewriter);
   }
 
-  LogicalResult rewriteBlockPtr(tts::MakeTensorPtrOp op, OpAdaptor adaptor,
-                                ConversionPatternRewriter &rewriter) const {
-    // Block pointers are basically the same as structured pointers except that
-    // the return types are !tt.ptr<tensor<AxBxCxbf16>> instead of
-    // tensor<AxBxCx!tt.ptr<bf16>>
-    ArrayRef<int64_t> resultShape =
-        cast<ShapedType>(
-            cast<triton::PointerType>(op.getType()).getPointeeType())
-            .getShape();
-    return rewritePtr(resultShape, true, op, adaptor, rewriter);
-  }
-
 public:
   MakeTensorPtrConverter(const TypeConverter &typeConverter,
                          MLIRContext *context)
@@ -581,7 +555,7 @@ public:
     }
 
     if (op.isBlockPtr()) {
-      return rewriteBlockPtr(op, adaptor, rewriter);
+      llvm_unreachable("Unexpected op type!");
     }
 
     if (op.isStructuredPtr()) {

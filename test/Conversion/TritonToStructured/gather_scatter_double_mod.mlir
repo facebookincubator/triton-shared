@@ -22,8 +22,8 @@
 // CHECK:           %[[VAL_16:.*]] = arith.remsi %[[VAL_14]], %[[VAL_15]] : tensor<4x1xi32>
 // CHECK:           %[[VAL_17:.*]] = arith.index_cast %[[VAL_3]] : i32 to index
 // CHECK:           %[[VAL_18:.*]] = tensor.collapse_shape %[[VAL_16]] {{\[\[}}0, 1]] : tensor<4x1xi32> into tensor<4xi32>
-// CHECK:           %[[VAL_19:.*]] = tts.make_gather_scatter_tptr %[[VAL_0]] to sizes: [4, 16] gather_scatter_dim: 0 gather_scatter_offset: %[[VAL_18]], strides: {{\[}}%[[VAL_17]], 1], offsets: [0, 0] : tensor<4xi32> <f32> to !tt.ptr<tensor<4x16xf32>>
-// CHECK:           %[[VAL_20:.*]] = "tts.load"(%[[VAL_19]]) <{operandSegmentSizes = array<i32: 1, 0, 0>, static_mask_dims = array<i64>}> : (!tt.ptr<tensor<4x16xf32>>) -> tensor<4x16xf32>
+// CHECK:           %[[VAL_19:.*]] = tts.make_gather_scatter_tptr %[[VAL_0]] to sizes: [4, 16] gather_scatter_dim: 0 gather_scatter_offset: %[[VAL_18]], strides: {{\[}}%[[VAL_17]], 1], offsets: [0, 0] : tensor<4xi32> <f32> to tensor<4x16x!tt.ptr<f32>>
+// CHECK:           %[[VAL_20:.*]] = "tts.load"(%[[VAL_19]]) <{operandSegmentSizes = array<i32: 1, 0, 0>, static_mask_dims = array<i64>}> : (tensor<4x16x!tt.ptr<f32>>) -> tensor<4x16xf32>
 // CHECK:           %[[VAL_21:.*]] = arith.index_cast %[[VAL_4]] : i32 to index
 // CHECK:           %[[VAL_22:.*]] = tts.make_tptr %[[VAL_1]] to sizes: [4, 16], strides: {{\[}}%[[VAL_21]], 1], offsets: [0, 0], shape: [0, 0], order: [] : <f32> to tensor<4x16x!tt.ptr<f32>>
 // CHECK:           "tts.store"(%[[VAL_22]], %[[VAL_20]]) <{static_mask_dims = array<i64>}> : (tensor<4x16x!tt.ptr<f32>>, tensor<4x16xf32>) -> ()

@@ -9,8 +9,8 @@
 // CHECK:           %[[VAL_4:.*]] = tts.make_tptr %[[VAL_2]] to sizes: [4], strides: [1], offsets: [0], shape: [0], order: [] : <i64> to tensor<4x!tt.ptr<i64>>
 // CHECK:           %[[VAL_5:.*]] = "tts.load"(%[[VAL_4]]) <{operandSegmentSizes = array<i32: 1, 0, 0>, static_mask_dims = array<i64>}> : (tensor<4x!tt.ptr<i64>>) -> tensor<4xi64>
 // CHECK:           %[[VAL_6:.*]] = arith.index_cast %[[VAL_3]] : i32 to index
-// CHECK:           %[[VAL_7:.*]] = tts.make_gather_scatter_tptr %[[VAL_0]] to sizes: [4, 16] gather_scatter_dim: 0 gather_scatter_offset: %[[VAL_5]], strides: {{\[}}%[[VAL_6]], 1], offsets: [0, 0] : tensor<4xi64> <f32> to !tt.ptr<tensor<4x16xf32>>
-// CHECK:           %[[VAL_8:.*]] = "tts.load"(%[[VAL_7]]) <{operandSegmentSizes = array<i32: 1, 0, 0>, static_mask_dims = array<i64>}> : (!tt.ptr<tensor<4x16xf32>>) -> tensor<4x16xf32>
+// CHECK:           %[[VAL_7:.*]] = tts.make_gather_scatter_tptr %[[VAL_0]] to sizes: [4, 16] gather_scatter_dim: 0 gather_scatter_offset: %[[VAL_5]], strides: {{\[}}%[[VAL_6]], 1], offsets: [0, 0] : tensor<4xi64> <f32> to tensor<4x16x!tt.ptr<f32>>
+// CHECK:           %[[VAL_8:.*]] = "tts.load"(%[[VAL_7]]) <{operandSegmentSizes = array<i32: 1, 0, 0>, static_mask_dims = array<i64>}> : (tensor<4x16x!tt.ptr<f32>>) -> tensor<4x16xf32>
 // CHECK:           %[[VAL_9:.*]] = arith.index_cast %[[VAL_3]] : i32 to index
 // CHECK:           %[[VAL_10:.*]] = tts.make_tptr %[[VAL_1]] to sizes: [4, 16], strides: {{\[}}%[[VAL_9]], 1], offsets: [0, 0], shape: [0, 0], order: [] : <f32> to tensor<4x16x!tt.ptr<f32>>
 // CHECK:           "tts.store"(%[[VAL_10]], %[[VAL_8]]) <{static_mask_dims = array<i64>}> : (tensor<4x16x!tt.ptr<f32>>, tensor<4x16xf32>) -> ()

@@ -19,48 +19,48 @@ module {
   }
 }
 
-// CHECK:   func.func @kernel(%arg0: !tt.ptr<i32> {{.*}}, %arg1: !tt.ptr<i32> {{.*}}, %arg2: !tt.ptr<i32> {{.*}}, %arg3: i32, %arg4: i32, %arg5: i32, %arg6: i32, %arg7: i32, %arg8: i32) {
-// CHECK:     [[EMPTY256:%.+]] = tensor.empty() : tensor<256xi32>
-// CHECK:     [[RANGE256:%.+]] = linalg.generic {{.*}} outs([[EMPTY256]] : tensor<256xi32>) {
-// CHECK:       ^bb0(%out: i32):
-// CHECK:         [[IDX0:%.+]] = linalg.index 0 : index
-// CHECK:         [[I32_0:%.+]] = arith.index_cast [[IDX0]] : index to i32
-// CHECK:         linalg.yield [[I32_0]] : i32
-// CHECK:     } -> tensor<256xi32>
-// CHECK:     [[EMPTY_PTR256:%.+]] = tensor.empty() : tensor<256x!tt.ptr<i32>>
-// CHECK:     [[SPLAT_ARG0:%.+]] = linalg.fill ins(%arg0 : !tt.ptr<i32>) outs([[EMPTY_PTR256]] : tensor<256x!tt.ptr<i32>>) -> tensor<256x!tt.ptr<i32>>
-// CHECK:     [[ADDPTR256:%.+]] = linalg.generic {{.*}} ins([[SPLAT_ARG0]], [[RANGE256]] : tensor<256x!tt.ptr<i32>>, tensor<256xi32>) outs([[SPLAT_ARG0]] : tensor<256x!tt.ptr<i32>>) {
-// CHECK:       ^bb0([[IN_PTR:%.+]]: !tt.ptr<i32>, [[IN_I32:%.+]]: i32, [[OUT_PTR:%.+]]: !tt.ptr<i32>):
-// CHECK:         [[NEW_PTR:%.+]] = tt.addptr [[IN_PTR]], [[IN_I32]] : !tt.ptr<i32>, i32
-// CHECK:         linalg.yield [[NEW_PTR]] : !tt.ptr<i32>
-// CHECK:     } -> tensor<256x!tt.ptr<i32>>
-// CHECK:     [[LOADED256:%.+]] = tt.load [[ADDPTR256]] : tensor<256x!tt.ptr<i32>>
-// CHECK:     [[RESHAPED:%.+]] = tensor.expand_shape [[LOADED256]]
-// CHECK:     [[SLICE_LHS:%.+]] = tensor.extract_slice [[RESHAPED]]{{\[}}0, 0{{\]}} [128, 1] [1, 1] : tensor<128x2xi32> to tensor<128xi32>
-// CHECK:     [[SLICE_RHS:%.+]] = tensor.extract_slice [[RESHAPED]]{{\[}}0, 1{{\]}} [128, 1] [1, 1] : tensor<128x2xi32> to tensor<128xi32>
-// CHECK:     [[EMPTY128:%.+]] = tensor.empty() : tensor<128xi32>
-// CHECK:     [[RANGE128:%.+]] = linalg.generic {{.*}} outs([[EMPTY128]] : tensor<128xi32>) {
-// CHECK:       ^bb0(%out: i32):
-// CHECK:         [[IDX1:%.+]] = linalg.index 0 : index
-// CHECK:         [[I32_1:%.+]] = arith.index_cast [[IDX1]] : index to i32
-// CHECK:         linalg.yield [[I32_1]] : i32
-// CHECK:     } -> tensor<128xi32>
-// CHECK:     [[EMPTY_PTR128_1:%.+]] = tensor.empty() : tensor<128x!tt.ptr<i32>>
-// CHECK:     [[SPLAT_ARG1:%.+]] = linalg.fill ins(%arg1 : !tt.ptr<i32>) outs([[EMPTY_PTR128_1]] : tensor<128x!tt.ptr<i32>>) -> tensor<128x!tt.ptr<i32>>
-// CHECK:     [[ADDPTR128_1:%.+]] = linalg.generic {{.*}} ins([[SPLAT_ARG1]], [[RANGE128]] : tensor<128x!tt.ptr<i32>>, tensor<128xi32>) outs([[SPLAT_ARG1]] : tensor<128x!tt.ptr<i32>>) {
-// CHECK:       ^bb0([[IN_PTR:%.+]]: !tt.ptr<i32>, [[IN_I32:%.+]]: i32, [[OUT_PTR:%.+]]: !tt.ptr<i32>):
-// CHECK:         [[NEW_PTR1:%.+]] = tt.addptr [[IN_PTR]], [[IN_I32]] : !tt.ptr<i32>, i32
-// CHECK:         linalg.yield [[NEW_PTR1]] : !tt.ptr<i32>
-// CHECK:     } -> tensor<128x!tt.ptr<i32>>
-// CHECK:     tt.store [[ADDPTR128_1]], [[SLICE_LHS]] : tensor<128x!tt.ptr<i32>>
-// CHECK:     [[EMPTY_PTR128_2:%.+]] = tensor.empty() : tensor<128x!tt.ptr<i32>>
-// CHECK:     [[SPLAT_ARG2:%.+]] = linalg.fill ins(%arg2 : !tt.ptr<i32>) outs([[EMPTY_PTR128_2]] : tensor<128x!tt.ptr<i32>>) -> tensor<128x!tt.ptr<i32>>
-// CHECK:     [[ADDPTR128_2:%.+]] = linalg.generic {{.*}} ins([[SPLAT_ARG2]], [[RANGE128]] : tensor<128x!tt.ptr<i32>>, tensor<128xi32>) outs([[SPLAT_ARG2]] : tensor<128x!tt.ptr<i32>>) {
-// CHECK:       ^bb0([[IN_PTR:%.+]]: !tt.ptr<i32>, [[IN_I32:%.+]]: i32, [[OUT_PTR:%.+]]: !tt.ptr<i32>):
-// CHECK:         [[NEW_PTR2:%.+]] = tt.addptr [[IN_PTR]], [[IN_I32]] : !tt.ptr<i32>, i32
-// CHECK:         linalg.yield [[NEW_PTR2]] : !tt.ptr<i32>
-// CHECK:     } -> tensor<128x!tt.ptr<i32>>
-// CHECK:     tt.store [[ADDPTR128_2]], [[SLICE_RHS]] : tensor<128x!tt.ptr<i32>>
-// CHECK:     return
-// CHECK:   }
-// CHECK: }
+
+// CHECK: #[[$ATTR_0:.+]] = affine_map<(d0) -> (d0)>
+// CHECK-LABEL:   func.func @kernel(
+// CHECK-SAME:                      %[[ARG0:.*]]: !tt.ptr<i32> {tt.divisibility = 16 : i32},                 %[[ARG1:.*]]: !tt.ptr<i32> {tt.divisibility = 16 : i32},                 %[[ARG2:.*]]: !tt.ptr<i32> {tt.divisibility = 16 : i32},                 %[[ARG3:.*]]: i32,                 %[[ARG4:.*]]: i32,                 %[[ARG5:.*]]: i32,                 %[[ARG6:.*]]: i32,                 %[[ARG7:.*]]: i32,                 %[[ARG8:.*]]: i32) {
+// CHECK:           %[[EMPTY_0:.*]] = tensor.empty() : tensor<256xi32>
+// CHECK:           %[[GENERIC_0:.*]] = linalg.generic {indexing_maps = [#[[$ATTR_0]]], iterator_types = ["parallel"]} outs(%[[EMPTY_0]] : tensor<256xi32>) {
+// CHECK:           ^bb0(%[[VAL_0:.*]]: i32):
+// CHECK:             %[[INDEX_0:.*]] = linalg.index 0 : index
+// CHECK:             %[[INDEX_CAST_0:.*]] = arith.index_cast %[[INDEX_0]] : index to i32
+// CHECK:             linalg.yield %[[INDEX_CAST_0]] : i32
+// CHECK:           } -> tensor<256xi32>
+// CHECK:           %[[SPLAT_0:.*]] = tensor.splat %[[ARG0]] : tensor<256x!tt.ptr<i32>>
+// CHECK:           %[[GENERIC_1:.*]] = linalg.generic {indexing_maps = [#[[$ATTR_0]], #[[$ATTR_0]], #[[$ATTR_0]]], iterator_types = ["parallel"]} ins(%[[SPLAT_0]], %[[GENERIC_0]] : tensor<256x!tt.ptr<i32>>, tensor<256xi32>) outs(%[[SPLAT_0]] : tensor<256x!tt.ptr<i32>>) {
+// CHECK:           ^bb0(%[[VAL_1:.*]]: !tt.ptr<i32>, %[[VAL_2:.*]]: i32, %[[VAL_3:.*]]: !tt.ptr<i32>):
+// CHECK:             %[[ADDPTR_0:.*]] = tt.addptr %[[VAL_1]], %[[VAL_2]] : !tt.ptr<i32>, i32
+// CHECK:             linalg.yield %[[ADDPTR_0]] : !tt.ptr<i32>
+// CHECK:           } -> tensor<256x!tt.ptr<i32>>
+// CHECK:           %[[LOAD_0:.*]] = tt.load %[[GENERIC_1]] : tensor<256x!tt.ptr<i32>>
+// CHECK:           %[[EXPAND_SHAPE_0:.*]] = tensor.expand_shape %[[LOAD_0]] {{\[\[}}0, 1]] output_shape [128, 2] : tensor<256xi32> into tensor<128x2xi32>
+// CHECK:           %[[EXTRACT_SLICE_0:.*]] = tensor.extract_slice %[[EXPAND_SHAPE_0]][0, 0] [128, 1] [1, 1] : tensor<128x2xi32> to tensor<128xi32>
+// CHECK:           %[[EXTRACT_SLICE_1:.*]] = tensor.extract_slice %[[EXPAND_SHAPE_0]][0, 1] [128, 1] [1, 1] : tensor<128x2xi32> to tensor<128xi32>
+// CHECK:           %[[EMPTY_1:.*]] = tensor.empty() : tensor<128xi32>
+// CHECK:           %[[GENERIC_2:.*]] = linalg.generic {indexing_maps = [#[[$ATTR_0]]], iterator_types = ["parallel"]} outs(%[[EMPTY_1]] : tensor<128xi32>) {
+// CHECK:           ^bb0(%[[VAL_4:.*]]: i32):
+// CHECK:             %[[INDEX_1:.*]] = linalg.index 0 : index
+// CHECK:             %[[INDEX_CAST_1:.*]] = arith.index_cast %[[INDEX_1]] : index to i32
+// CHECK:             linalg.yield %[[INDEX_CAST_1]] : i32
+// CHECK:           } -> tensor<128xi32>
+// CHECK:           %[[SPLAT_1:.*]] = tensor.splat %[[ARG1]] : tensor<128x!tt.ptr<i32>>
+// CHECK:           %[[GENERIC_3:.*]] = linalg.generic {indexing_maps = [#[[$ATTR_0]], #[[$ATTR_0]], #[[$ATTR_0]]], iterator_types = ["parallel"]} ins(%[[SPLAT_1]], %[[GENERIC_2]] : tensor<128x!tt.ptr<i32>>, tensor<128xi32>) outs(%[[SPLAT_1]] : tensor<128x!tt.ptr<i32>>) {
+// CHECK:           ^bb0(%[[VAL_5:.*]]: !tt.ptr<i32>, %[[VAL_6:.*]]: i32, %[[VAL_7:.*]]: !tt.ptr<i32>):
+// CHECK:             %[[ADDPTR_1:.*]] = tt.addptr %[[VAL_5]], %[[VAL_6]] : !tt.ptr<i32>, i32
+// CHECK:             linalg.yield %[[ADDPTR_1]] : !tt.ptr<i32>
+// CHECK:           } -> tensor<128x!tt.ptr<i32>>
+// CHECK:           tt.store %[[GENERIC_3]], %[[EXTRACT_SLICE_0]] : tensor<128x!tt.ptr<i32>>
+// CHECK:           %[[SPLAT_2:.*]] = tensor.splat %[[ARG2]] : tensor<128x!tt.ptr<i32>>
+// CHECK:           %[[GENERIC_4:.*]] = linalg.generic {indexing_maps = [#[[$ATTR_0]], #[[$ATTR_0]], #[[$ATTR_0]]], iterator_types = ["parallel"]} ins(%[[SPLAT_2]], %[[GENERIC_2]] : tensor<128x!tt.ptr<i32>>, tensor<128xi32>) outs(%[[SPLAT_2]] : tensor<128x!tt.ptr<i32>>) {
+// CHECK:           ^bb0(%[[VAL_8:.*]]: !tt.ptr<i32>, %[[VAL_9:.*]]: i32, %[[VAL_10:.*]]: !tt.ptr<i32>):
+// CHECK:             %[[ADDPTR_2:.*]] = tt.addptr %[[VAL_8]], %[[VAL_9]] : !tt.ptr<i32>, i32
+// CHECK:             linalg.yield %[[ADDPTR_2]] : !tt.ptr<i32>
+// CHECK:           } -> tensor<128x!tt.ptr<i32>>
+// CHECK:           tt.store %[[GENERIC_4]], %[[EXTRACT_SLICE_1]] : tensor<128x!tt.ptr<i32>>
+// CHECK:           return
+// CHECK:         }
+

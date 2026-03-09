@@ -32,31 +32,33 @@ module {
 }
 
 
+// CHECK:           %[[CONSTANT_0:.*]] = arith.constant 0 : index
+// CHECK:           %[[CONSTANT_2:.*]] = arith.constant 0 : i32
 // CHECK-COUNT-7: linalg.generic
 
 // CHECK: [[MASK:%.+]] = linalg.generic
-// CHECK: ^bb0(%in: i32, %in_0: i32, %out: i1):
-// CHECK:     [[YIELD:%.+]] = arith.cmpi ne, %in, %in_0 : i32
-// CHECK:     linalg.yield [[YIELD]] : i1
-// CHECK: } -> tensor<16xi1>
+// CHECK:           ^bb0(%[[VAL_15:.*]]: i32, %[[VAL_16:.*]]: i32, %[[VAL_17:.*]]: i1):
+// CHECK:             %[[CMPI_0:.*]] = arith.cmpi ne, %[[VAL_15]], %[[VAL_16]] : i32
+// CHECK:             linalg.yield %[[CMPI_0]] : i1
+// CHECK:           } -> tensor<16xi1>
 
 // CHECK:  linalg.generic {indexing_maps = [#map, #map, #map], iterator_types = ["parallel"]} ins(%{{.+}}, [[MASK]] : tensor<16x!ptr.ptr<#tptr.default_memory_space>>, tensor<16xi1>)
-// CHECK:  ^bb0(%in: !ptr.ptr<#tptr.default_memory_space>, %in_0: i1, %out: i32):
-// CHECK:    [[MEMREF:%.+]] = ptr.from_ptr %in : <#tptr.default_memory_space> -> memref<1xi32, #tptr.default_memory_space>
-// CHECK:    [[SCF_IF:%.+]] = scf.if %in_0 -> (i32) {
-// CHECK:      [[LOAD:%.+]] = memref.load [[MEMREF]][%c0] : memref<1xi32, #tptr.default_memory_space>
-// CHECK:      scf.yield [[LOAD]] : i32
-// CHECK:    } else {
-// CHECK:      scf.yield %c0_i32 : i32
-// CHECK:    }
-// CHECK:    linalg.yield [[SCF_IF]] : i32
-// CHECK:  } -> tensor<16xi32>
+// CHECK:           ^bb0(%[[VAL_18:.*]]: !ptr.ptr<#tptr.default_memory_space>, %[[VAL_19:.*]]: i1, %[[VAL_20:.*]]: i32):
+// CHECK:             %[[FROM_PTR_2:.*]] = ptr.from_ptr %[[VAL_18]] : <#tptr.default_memory_space> -> memref<1xi32, #tptr.default_memory_space>
+// CHECK:             %[[IF_0:.*]] = scf.if %[[VAL_19]] -> (i32) {
+// CHECK:               %[[LOAD_2:.*]] = memref.load %[[FROM_PTR_2]]{{\[}}%[[CONSTANT_0]]] : memref<1xi32, #tptr.default_memory_space>
+// CHECK:               scf.yield %[[LOAD_2]] : i32
+// CHECK:             } else {
+// CHECK:               scf.yield %[[CONSTANT_2]] : i32
+// CHECK:             }
+// CHECK:             linalg.yield %[[IF_0]] : i32
+// CHECK:           } -> tensor<16xi32>
 
 // CHECK:  linalg.generic
-// CHECK:  ^bb0(%in: !ptr.ptr<#tptr.default_memory_space>, %in_0: i32, %in_1: i1):
-// CHECK:    scf.if %in_1 {
-// CHECK:      [[MEMREF:%.+]] = ptr.from_ptr %in : <#tptr.default_memory_space> -> memref<1xi32, #tptr.default_memory_space>
-// CHECK:      memref.store %in_0, [[MEMREF]][%c0] : memref<1xi32, #tptr.default_memory_space>
-// CHECK:    }
-// CHECK:    linalg.yield
-// CHECK:  }
+// CHECK:           ^bb0(%[[VAL_36:.*]]: !ptr.ptr<#tptr.default_memory_space>, %[[VAL_37:.*]]: i32, %[[VAL_38:.*]]: i1):
+// CHECK:             scf.if %[[VAL_38]] {
+// CHECK:               %[[FROM_PTR_3:.*]] = ptr.from_ptr %[[VAL_36]] : <#tptr.default_memory_space> -> memref<1xi32, #tptr.default_memory_space>
+// CHECK:               memref.store %[[VAL_37]], %[[FROM_PTR_3]]{{\[}}%[[CONSTANT_0]]] : memref<1xi32, #tptr.default_memory_space>
+// CHECK:             }
+// CHECK:             linalg.yield
+// CHECK:           }

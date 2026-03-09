@@ -14,10 +14,10 @@
 // CHECK:           %[[VAL_8:.*]] = arith.index_cast %[[VAL_3]] : i32 to index
 // CHECK:           %[[VAL_9:.*]] = arith.index_cast %[[VAL_5]] : i32 to index
 // CHECK:           %[[VAL_10:.*]] = arith.index_cast %[[VAL_4]] : i32 to index
-// CHECK:           %[[VAL_11:.*]] = tts.make_gather_scatter_tptr %[[VAL_0]] to sizes: [32, 32, 32] gather_scatter_dim: 1 gather_scatter_offset: %[[VAL_7]], strides: {{\[}}%[[VAL_8]], %[[VAL_10]], %[[VAL_9]]], offsets: [0, 0, 0] : tensor<32xi32> <f32> to !tt.ptr<tensor<32x32x32xf32>>
-// CHECK:           %[[VAL_12:.*]] = "tts.load"(%[[VAL_11]]) <{operandSegmentSizes = array<i32: 1, 0, 0>, static_mask_dims = array<i64>}> : (!tt.ptr<tensor<32x32x32xf32>>) -> tensor<32x32x32xf32>
-// CHECK:           %[[VAL_13:.*]] = tts.make_gather_scatter_tptr %[[VAL_2]] to sizes: [32, 32, 32] gather_scatter_dim: 1 gather_scatter_offset: %[[VAL_7]], strides: {{\[}}%[[VAL_8]], %[[VAL_10]], %[[VAL_9]]], offsets: [0, 0, 0] : tensor<32xi32> <f32> to !tt.ptr<tensor<32x32x32xf32>>
-// CHECK:           "tts.store"(%[[VAL_13]], %[[VAL_12]]) <{static_mask_dims = array<i64>}> : (!tt.ptr<tensor<32x32x32xf32>>, tensor<32x32x32xf32>) -> ()
+// CHECK:           %[[VAL_11:.*]] = tts.make_gather_scatter_tptr %[[VAL_0]] to sizes: [32, 32, 32] gather_scatter_dim: 1 gather_scatter_offset: %[[VAL_7]], strides: {{\[}}%[[VAL_8]], %[[VAL_10]], %[[VAL_9]]], offsets: [0, 0, 0] : tensor<32xi32> <f32> to tensor<32x32x32x!tt.ptr<f32>>
+// CHECK:           %[[VAL_12:.*]] = "tts.load"(%[[VAL_11]]) <{operandSegmentSizes = array<i32: 1, 0, 0>, static_mask_dims = array<i64>}> : (tensor<32x32x32x!tt.ptr<f32>>) -> tensor<32x32x32xf32>
+// CHECK:           %[[VAL_13:.*]] = tts.make_gather_scatter_tptr %[[VAL_2]] to sizes: [32, 32, 32] gather_scatter_dim: 1 gather_scatter_offset: %[[VAL_7]], strides: {{\[}}%[[VAL_8]], %[[VAL_10]], %[[VAL_9]]], offsets: [0, 0, 0] : tensor<32xi32> <f32> to tensor<32x32x32x!tt.ptr<f32>>
+// CHECK:           "tts.store"(%[[VAL_13]], %[[VAL_12]]) <{static_mask_dims = array<i64>}> : (tensor<32x32x32x!tt.ptr<f32>>, tensor<32x32x32xf32>) -> ()
 // CHECK:           tt.return
 
 module attributes {} {

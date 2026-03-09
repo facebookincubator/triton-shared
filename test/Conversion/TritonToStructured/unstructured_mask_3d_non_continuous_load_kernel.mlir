@@ -42,8 +42,8 @@
 // CHECK:           %[[VAL_35:.*]] = arith.minsi %[[VAL_34]], %[[VAL_12]] : index
 // CHECK:           %[[VAL_36:.*]] = arith.minsi %[[VAL_31]], %[[VAL_15]] : index
 // CHECK:           %[[VAL_37:.*]] = arith.minsi %[[VAL_35]], %[[VAL_12]] : index
-// CHECK:           %[[VAL_38:.*]] = tts.make_gather_scatter_tptr %[[VAL_0]] to sizes: [4, 4, 16] gather_scatter_dim: 1 gather_scatter_offset: %[[VAL_23]] gather_scatter_mask: %[[VAL_26]], strides: {{\[}}%[[VAL_27]], %[[VAL_28]], 1], offsets: [0, 0, 0] : tensor<4xi32> tensor<4xi1> <f32> to !tt.ptr<tensor<4x4x16xf32>>
-// CHECK:           %[[VAL_39:.*]] = "tts.load"(%[[VAL_38]], %[[VAL_36]], %[[VAL_37]], %[[VAL_11]]) <{operandSegmentSizes = array<i32: 1, 2, 1>, static_mask_dims = array<i64: -9223372036854775808, 0, -9223372036854775808>}> : (!tt.ptr<tensor<4x4x16xf32>>, index, index, f32) -> tensor<4x4x16xf32>
+// CHECK:           %[[VAL_38:.*]] = tts.make_gather_scatter_tptr %[[VAL_0]] to sizes: [4, 4, 16] gather_scatter_dim: 1 gather_scatter_offset: %[[VAL_23]] gather_scatter_mask: %[[VAL_26]], strides: {{\[}}%[[VAL_27]], %[[VAL_28]], 1], offsets: [0, 0, 0] : tensor<4xi32> tensor<4xi1> <f32> to tensor<4x4x16x!tt.ptr<f32>>
+// CHECK:           %[[VAL_39:.*]] = "tts.load"(%[[VAL_38]], %[[VAL_36]], %[[VAL_37]], %[[VAL_11]]) <{operandSegmentSizes = array<i32: 1, 2, 1>, static_mask_dims = array<i64: -9223372036854775808, 0, -9223372036854775808>}> : (tensor<4x4x16x!tt.ptr<f32>>, index, index, f32) -> tensor<4x4x16xf32>
 
 
 module {

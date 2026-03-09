@@ -557,19 +557,6 @@ void PtrAnalysis::visitOperandSplat(
     state.offsets[0] = state.scalar;
 }
 
-void PtrAnalysis::visitOperandMakeTensorPtr(
-    triton::MakeTensorPtrOp makeTensorPtrOp, PtrState &state,
-    const Location loc, ConversionPatternRewriter &rewriter,
-    const llvm::SmallDenseMap<Value, PtrState> &knownPtrs) {
-  assert(state.isEmpty());
-  auto remappedValue = rewriter.getRemappedValue(makeTensorPtrOp);
-  if (auto castOp = remappedValue.getDefiningOp<memref::ReinterpretCastOp>()) {
-    visitOperandReintCast(castOp, state, loc, rewriter, knownPtrs);
-  } else {
-    llvm_unreachable("Expect value to me mapped to a memref.reinterpret_cast");
-  }
-}
-
 void PtrAnalysis::visitOperandAddptr(
     triton::AddPtrOp addptrOp, PtrState &state, const Location loc,
     ConversionPatternRewriter &rewriter,
@@ -664,9 +651,6 @@ void PtrAnalysis::visitOperand(
       if (auto addPtrOp = dyn_cast<triton::AddPtrOp>(op)) {
         visitOperandAddptr(cast<triton::AddPtrOp>(op), state, loc, rewriter,
                            knownPtrs);
-      } else if (auto makeTensorOp = dyn_cast<triton::MakeTensorPtrOp>(op)) {
-        visitOperandMakeTensorPtr(makeTensorOp, state, loc, rewriter,
-                                  knownPtrs);
       } else {
         llvm_unreachable("Unexpected operand defining operation");
       }
@@ -841,62 +825,6 @@ void PtrAnalysis::rewriteAddptrOp(
   rewriter.restoreInsertionPoint(origIp);
 }
 
-void PtrAnalysis::rewriteAdvanceOp(
-    triton::AdvanceOp op, ConversionPatternRewriter &rewriter,
-    llvm::SmallDenseMap<Value, PtrState> &knownPtrs) {
-  OpBuilder::InsertionGuard insertionGuard{rewriter};
-  rewriter.setInsertionPoint(op);
-  auto loc = op.getLoc();
-
-  PtrState ptrState;
-  visitOperand(op.getOperand(0), ptrState, loc, rewriter, knownPtrs);
-
-  auto incrementOffsets = op.getOffsets();
-
-  SmallVector<Value> newOffsets;
-  for (auto [increment, offset, stride] :
-       llvm::zip(incrementOffsets, ptrState.offsets, ptrState.strides)) {
-    Value offsetValue;
-    if (auto offsetIntAttr = getIntAttr(offset)) {
-      auto constOp = arith::ConstantOp::create(rewriter, op.getLoc(),
-                                               rewriter.getIndexAttr(0));
-      offsetValue = constOp.getResult();
-    } else {
-      offsetValue = cast<Value>(offset);
-    }
-    auto castOp = arith::IndexCastOp::create(
-        rewriter, loc, rewriter.getIndexType(), increment);
-    auto mulOp = arith::MulIOp::create(rewriter, loc, castOp.getResult(),
-                                       cast<Value>(stride));
-    auto addOp =
-        arith::AddIOp::create(rewriter, loc, mulOp.getResult(), offsetValue);
-    newOffsets.push_back(addOp.getResult());
-  }
-
-  ptrState.offsets.clear();
-
-  for (auto offset : newOffsets) {
-    ptrState.offsets.push_back(offset);
-  }
-
-  SmallVector<int64_t> scalarShape(1, 1);
-  ArrayRef<int64_t> resultShape;
-  auto pointerType = cast<mlir::triton::PointerType>(op.getResult().getType());
-  if (auto shapedType = dyn_cast<ShapedType>(pointerType.getPointeeType())) {
-    resultShape = shapedType.getShape();
-  } else {
-    // scalar pointer, should produce a one dimensional memref
-    resultShape = scalarShape;
-    assert(ptrState.getRank() == 1);
-  }
-
-  auto newOp = ptrState.createCastOp(resultShape, loc, rewriter);
-
-  rewriter.replaceOp(op, newOp.getResult());
-
-  knownPtrs[newOp.getResult()] = ptrState;
-}
-
 void PtrAnalysis::rewriteYieldOp(
     scf::YieldOp op, ConversionPatternRewriter &rewriter,
     const IndexMapSet &levelToBlockArgIndex, const int level,
@@ -922,9 +850,7 @@ void PtrAnalysis::rewriteYieldOp(
       // we should have already converted to a ReinterpretCastOp without
       // layout information for the normal cases, or to an
       // UnrealizedConversionCastOp for the split pointer case.
-      if (v.getDefiningOp<triton::AddPtrOp>() ||
-          v.getDefiningOp<triton::AdvanceOp>() ||
-          v.getDefiningOp<triton::MakeTensorPtrOp>()) {
+      if (v.getDefiningOp<triton::AddPtrOp>()) {
         if (auto castOp = mappedV.getDefiningOp<UnrealizedConversionCastOp>()) {
           assertValidUnrealizedCast(castOp);
           auto castInputs = castOp.getInputs();
@@ -1321,8 +1247,6 @@ void PtrAnalysis::rewriteForOp(
   for (auto &bodyOp : newOp.getRegion().getOps()) {
     if (auto addptrOp = dyn_cast<triton::AddPtrOp>(bodyOp)) {
       rewriteAddptrOp(addptrOp, rewriter, knownPtrs);
-    } else if (auto advanceOp = dyn_cast<triton::AdvanceOp>(bodyOp)) {
-      rewriteAdvanceOp(advanceOp, rewriter, knownPtrs);
     } else if (auto forOp = dyn_cast<scf::ForOp>(bodyOp)) {
       // TODO:
       //  Nested for loops are not supported at the moment

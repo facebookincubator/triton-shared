@@ -59,14 +59,14 @@ module {
     %3 = tt.splat %arg4 : i32 -> tensor<32xi32>
     %4 = arith.muli %1, %3 : tensor<32xi32>
     %5 = arith.index_cast %arg5 : i32 to index
-    %6 = tts.make_gather_scatter_tptr %arg0 to sizes: [32, 32, 32] gather_scatter_dim: 1 gather_scatter_offset: %4, strides: [%2, 1, %5], offsets: [0, 0, 0] : tensor<32xi32> <f32> to !tt.ptr<tensor<32x32x32xf32>>
-    %7 = "tts.load"(%6) <{operandSegmentSizes = array<i32: 1, 0, 0>, static_mask_dims = array<i64>}> : (!tt.ptr<tensor<32x32x32xf32>>) -> tensor<32x32x32xf32>
+    %6 = tts.make_gather_scatter_tptr %arg0 to sizes: [32, 32, 32] gather_scatter_dim: 1 gather_scatter_offset: %4, strides: [%2, 1, %5], offsets: [0, 0, 0] : tensor<32xi32> <f32> to tensor<32x32x32x!tt.ptr<f32>>
+    %7 = "tts.load"(%6) <{operandSegmentSizes = array<i32: 1, 0, 0>, static_mask_dims = array<i64>}> : (tensor<32x32x32x!tt.ptr<f32>>) -> tensor<32x32x32xf32>
     %8 = arith.index_cast %arg3 : i32 to index
     %9 = tt.splat %arg4 : i32 -> tensor<32xi32>
     %10 = arith.muli %1, %9 : tensor<32xi32>
     %11 = arith.index_cast %arg5 : i32 to index
-    %12 = tts.make_gather_scatter_tptr %arg2 to sizes: [32, 32, 32] gather_scatter_dim: 1 gather_scatter_offset: %10, strides: [%8, 1, %11], offsets: [0, 0, 0] : tensor<32xi32> <f32> to !tt.ptr<tensor<32x32x32xf32>>
-    "tts.store"(%12, %7) <{static_mask_dims = array<i64>}> : (!tt.ptr<tensor<32x32x32xf32>>, tensor<32x32x32xf32>) -> ()
+    %12 = tts.make_gather_scatter_tptr %arg2 to sizes: [32, 32, 32] gather_scatter_dim: 1 gather_scatter_offset: %10, strides: [%8, 1, %11], offsets: [0, 0, 0] : tensor<32xi32> <f32> to tensor<32x32x32x!tt.ptr<f32>>
+    "tts.store"(%12, %7) <{static_mask_dims = array<i64>}> : (tensor<32x32x32x!tt.ptr<f32>>, tensor<32x32x32xf32>) -> ()
     tt.return
   }
 }
