@@ -311,13 +311,6 @@ public:
                                      PtrState &state, const Location loc,
                                      OpBuilder &builder);
 
-  // Operand is the result of tt.make_tensor_ptr.
-  // Expected result:
-  //  Parse source pointer and grab results
-  LogicalResult visitOperandMakeTensorPtr(triton::MakeTensorPtrOp makeTPtrOp,
-                                          PtrState &state, const Location loc,
-                                          OpBuilder &builder);
-
   // Operand is the result of tt.int_to_ptr.
   // Expected result:
   //  Directly grab op result
@@ -350,10 +343,6 @@ public:
   // calculate strides and offsets, build PtrState for this operand, and record
   // PtrState for knownPtrs.
   LogicalResult rewriteAddptrOp(triton::AddPtrOp op);
-
-  LogicalResult rewriteMakeTensorPtrOp(triton::MakeTensorPtrOp op);
-
-  LogicalResult rewriteAdvanceOp(triton::AdvanceOp op);
 
   // Parse the state of YieldOp, insert any instruction needed to calculate
   // strides and offsets, build PtrState for this operand, and record PtrState

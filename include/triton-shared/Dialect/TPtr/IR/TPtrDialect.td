@@ -36,7 +36,6 @@ def TPtr_Dialect : Dialect {
   ];
 
   let useDefaultAttributePrinterParser = 1;
-  let usePropertiesForAttributes = 1;
 }
 
 class TPtrTypeDef<string name, string _mnemonic, list<Trait> traits = []>

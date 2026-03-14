@@ -205,11 +205,6 @@ public:
                          ConversionPatternRewriter &rewriter,
                          const llvm::SmallDenseMap<Value, PtrState> &knownPtrs);
 
-  static void visitOperandMakeTensorPtr(
-      triton::MakeTensorPtrOp makeTensorPtrOp, PtrState &state,
-      const Location loc, ConversionPatternRewriter &rewriter,
-      const llvm::SmallDenseMap<Value, PtrState> &knownPtrs);
-
   // Operand is the result of addptr.
   // Main assumptions:
   //  The ptr field should populate the source field
@@ -230,16 +225,6 @@ public:
   visitOperandReintCast(memref::ReinterpretCastOp reintCastOp, PtrState &state,
                         const Location loc, ConversionPatternRewriter &rewriter,
                         const llvm::SmallDenseMap<Value, PtrState> &knownPtrs);
-
-  // Operand is the result of tt.advance.
-  // Main assumptions:
-  //  The source of the tt.advance has been mapped to a reinterpret_cast
-  // Expected result:
-  //  Directly grab all corresponding fields from reinterpret_cast.
-  //  Add the offsets multiplied by the strides to the final offsets.
-  static void rewriteAdvanceOp(triton::AdvanceOp op,
-                               ConversionPatternRewriter &rewriter,
-                               llvm::SmallDenseMap<Value, PtrState> &knownPtrs);
 
   // Parse the state of AddPtrOp, insert any instruction needed to
   // calculate strides and offsets, build PtrState for this operand, and record

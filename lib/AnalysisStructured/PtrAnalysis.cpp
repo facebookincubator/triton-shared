@@ -1109,48 +1109,6 @@ LogicalResult PtrAnalysis::visitOperandMakeTPtr(tts::MakeTensorPtrOp makeTPtrOp,
   return success();
 }
 
-LogicalResult
-PtrAnalysis::visitOperandMakeTensorPtr(triton::MakeTensorPtrOp makeTPtrOp,
-                                       PtrState &state, const Location loc,
-                                       OpBuilder &builder) {
-  assert(state.isEmpty());
-  state.source = makeTPtrOp.getBase();
-
-  if (makeTPtrOp.getOrder().empty()) {
-    LLVM_DEBUG(makeTPtrOp->emitRemark(
-        "PtrAnalysis: expect tt.make_tensor_ptr to have order field set"));
-    return failure();
-  }
-
-  auto resType = cast<triton::PointerType>(makeTPtrOp.getResult().getType());
-  auto pointeeType = cast<ShapedType>(resType.getPointeeType());
-  auto shape = pointeeType.getShape();
-
-  for (int64_t i = 0; i < pointeeType.getRank(); i++) {
-    state.sizes.push_back(builder.getIndexAttr(shape[i]));
-
-    auto strideCst = arith::IndexCastOp::create(
-        builder, loc, builder.getIndexType(), makeTPtrOp.getStrides()[i]);
-    state.strides.push_back(strideCst.getResult());
-
-    auto offsetCst = arith::IndexCastOp::create(
-        builder, loc, builder.getIndexType(), makeTPtrOp.getOffsets()[i]);
-
-    auto scaledOffset = arith::MulIOp::create(
-        builder, loc, offsetCst.getResult(), strideCst.getResult());
-    state.offsets.push_back(scaledOffset.getResult());
-
-    auto shapeCst = arith::IndexCastOp::create(
-        builder, loc, builder.getIndexType(), makeTPtrOp.getShape()[i]);
-    state.shape.push_back(shapeCst.getResult());
-  }
-  state.order = SmallVector<int32_t>(makeTPtrOp.getOrder());
-  assert(state.isBlockPtr() &&
-         "tt.make_tensor_ptr pointer state should describe a block pointer");
-
-  return success();
-}
-
 LogicalResult PtrAnalysis::visitOperandForOp(scf::ForOp forOp, Value operand,
                                              PtrState &state,
                                              const Location loc,
@@ -1233,8 +1191,6 @@ LogicalResult PtrAnalysis::visitOperand(Value operand, PtrState &state,
         return visitOperandBitcast(castOp, state, loc, builder);
       } else if (auto intToPtrOp = dyn_cast<triton::IntToPtrOp>(op)) {
         return visitOperandIntToPtr(intToPtrOp, state, loc, builder);
-      } else if (auto makeTensorOp = dyn_cast<triton::MakeTensorPtrOp>(op)) {
-        llvm_unreachable("Unexpected operand defining operation tts.make_tptr");
       } else if (auto ifOp = dyn_cast<scf::IfOp>(op)) {
         state.source = operand;
         return success();
@@ -1347,63 +1303,6 @@ LogicalResult PtrAnalysis::rewriteAddptrOp(triton::AddPtrOp op) {
     // pointer, which may be used by rewriteForOp later.
     ptrMap.map(op.getResult(), op.getResult());
   }
-  return success();
-}
-
-LogicalResult PtrAnalysis::rewriteMakeTensorPtrOp(triton::MakeTensorPtrOp op) {
-  OpBuilder builder(op);
-
-  PtrState state;
-  if (visitOperandMakeTensorPtr(op, state, op.getLoc(), builder).failed()) {
-    return failure();
-  }
-
-  auto maketptrOp = state.createTTSMakeTensorPtrOp(builder, op.getLoc());
-  knownPtrs[op.getResult()] = state;
-  ptrMap.map(op.getResult(), maketptrOp.getResult());
-  return success();
-}
-
-LogicalResult PtrAnalysis::rewriteAdvanceOp(triton::AdvanceOp op) {
-  OpBuilder builder(op);
-  auto loc = op.getLoc();
-
-  PtrState state;
-  if (visitOperand(op->getOperand(0), state, loc, builder).failed()) {
-    LLVM_DEBUG(
-        op->emitRemark("PtrAnalysis: Failed to analyze ptr of tt.advance"));
-    return failure();
-  }
-  assert(state.isBlockPtr() &&
-         "tt.advance pointer state should describe a block pointer");
-
-  auto incrementOffsets = op.getOffsets();
-
-  SmallVector<OpFoldResult> newOffsets;
-  for (auto [increment, offset, stride] :
-       llvm::zip(incrementOffsets, state.offsets, state.strides)) {
-    Value offsetValue;
-    if (auto offsetIntAttr = getIntAttr(offset)) {
-      auto constOp = arith::ConstantOp::create(
-          builder, loc, builder.getIndexAttr(offsetIntAttr.value()));
-      offsetValue = constOp.getResult();
-    } else {
-      offsetValue = cast<Value>(offset);
-    }
-    auto castOp = arith::IndexCastOp::create(builder, loc,
-                                             builder.getIndexType(), increment);
-    auto mulOp = arith::MulIOp::create(builder, loc, castOp.getResult(),
-                                       cast<Value>(stride));
-    auto addOp =
-        arith::AddIOp::create(builder, loc, mulOp.getResult(), offsetValue);
-    newOffsets.push_back(addOp.getResult());
-  }
-
-  state.offsets = SmallVector<OpFoldResult>(newOffsets);
-
-  auto newOp = state.createTTSMakeTensorPtrOp(builder, loc);
-  knownPtrs[op.getResult()] = state;
-  ptrMap.map(op.getResult(), newOp.getResult());
   return success();
 }
 
@@ -1870,20 +1769,6 @@ LogicalResult PtrAnalysis::rewriteOp(Operation *rootOp, bool useUnsafeMask) {
           if (rewriteAddptrOp(addptr).failed()) {
             LLVM_DEBUG(
                 addptr->emitRemark("PtrAnalysis: Failed to rewrite AddPtrOp"));
-          }
-          return WalkResult::advance();
-        })
-        .Case<triton::MakeTensorPtrOp>([&](auto maketptr) {
-          if (rewriteMakeTensorPtrOp(maketptr).failed()) {
-            LLVM_DEBUG(maketptr->emitRemark(
-                "PtrAnalysis: Failed to rewrite MakeTensorPtrOp"));
-          }
-          return WalkResult::advance();
-        })
-        .Case<triton::AdvanceOp>([&](auto advance) {
-          if (rewriteAdvanceOp(advance).failed()) {
-            LLVM_DEBUG(advance->emitRemark(
-                "PtrAnalysis: Failed to rewrite AdvanceOp"));
           }
           return WalkResult::advance();
         })

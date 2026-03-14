@@ -471,9 +471,6 @@ public:
     // We do not want to lower triton load and store on block pointers
     target.addDynamicallyLegalOp<triton::LoadOp, triton::StoreOp>([](auto op) {
       auto ptrType = op->getOperand(0).getType();
-      if (triton::isTensorPointerType(ptrType)) {
-        return true;
-      }
       return !triton::isPtrTypeLike(ptrType);
     });
 

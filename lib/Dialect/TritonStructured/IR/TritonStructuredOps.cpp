@@ -128,8 +128,8 @@ void MakeTensorPtrOp::build(OpBuilder &b, OperationState &state, Value base,
   }
   // block pointer
   else {
-    resType = triton::PointerType::get(RankedTensorType::get(sizes, elemType),
-                                       basePtr.getAddressSpace());
+    resType = RankedTensorType::get(
+        sizes, triton::PointerType::get(elemType, basePtr.getAddressSpace()));
   }
 
   build(b, state, resType, base, sizes, dynamicStrides, dynamicOffsets,
@@ -158,8 +158,8 @@ void MakeGatherScatterTensorPtrOp::build(OpBuilder &b, OperationState &state,
   auto basePtr = cast<triton::PointerType>(base.getType());
   auto elemType = basePtr.getPointeeType();
 
-  resType = triton::PointerType::get(RankedTensorType::get(sizes, elemType),
-                                     basePtr.getAddressSpace());
+  resType = RankedTensorType::get(
+      sizes, triton::PointerType::get(elemType, basePtr.getAddressSpace()));
 
   build(b, state, resType, base, gatherScatterOffset,
         b.getI32IntegerAttr(gatherScatterDim), b.getDenseI64ArrayAttr(sizes),
@@ -191,8 +191,8 @@ void MakeGatherScatterTensorPtrOp::build(
     resType = triton::PointerType::get(elemType, basePtr.getAddressSpace());
 
   } else {
-    resType = triton::PointerType::get(RankedTensorType::get(sizes, elemType),
-                                       basePtr.getAddressSpace());
+    resType = RankedTensorType::get(
+        sizes, triton::PointerType::get(elemType, basePtr.getAddressSpace()));
   }
 
   build(b, state, resType, base, gatherScatterOffset,
