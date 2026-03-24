@@ -58,7 +58,6 @@ static memref::SubViewOp getSubview(int rank, ArrayRef<OpFoldResult> dims,
 }
 
 static Type getElementTypeStructuredPtr(tts::MakeTensorPtrOp op) {
-  assert(!op.isBlockPtr());
   // tensor<1024x!tt.ptr<f32>>
   auto ptrType = cast<triton::PointerType>(
       cast<RankedTensorType>(op.getType()).getElementType());
@@ -69,13 +68,7 @@ static MemRefType getResultMemrefType(tts::MakeTensorPtrOp op, int64_t offset,
                                       ArrayRef<int64_t> staticStrides,
                                       ArrayRef<int64_t> resultShape) {
   auto layout = StridedLayoutAttr::get(op.getContext(), offset, staticStrides);
-  Type elemType;
-  if (op.isBlockPtr()) {
-    elemType = nullptr;
-    llvm_unreachable("Unexpected op type!");
-  } else {
-    elemType = getElementTypeStructuredPtr(op);
-  }
+  Type elemType = getElementTypeStructuredPtr(op);
   return MemRefType::get(resultShape, elemType, layout);
 }
 
@@ -222,7 +215,6 @@ private:
   using OpConversionPattern<tts::MakeTensorPtrOp>::OpConversionPattern;
 
   static Type getElementTypeStructuredPtr(tts::MakeTensorPtrOp op) {
-    assert(!op.isBlockPtr());
     // tensor<1024x!tt.ptr<f32>>
     auto ptrType = cast<triton::PointerType>(
         cast<RankedTensorType>(op.getType()).getElementType());
@@ -234,13 +226,7 @@ private:
                                         ArrayRef<int64_t> resultShape) {
     auto layout =
         StridedLayoutAttr::get(op.getContext(), offset, staticStrides);
-    Type elemType;
-    if (op.isBlockPtr()) {
-      elemType = nullptr;
-      llvm_unreachable("Unexpected op type!");
-    } else {
-      elemType = getElementTypeStructuredPtr(op);
-    }
+    Type elemType = getElementTypeStructuredPtr(op);
     return MemRefType::get(resultShape, elemType, layout);
   }
 
@@ -508,7 +494,7 @@ private:
     return success();
   }
 
-  LogicalResult rewritePtr(ArrayRef<int64_t> resultShape, bool isBlockPtr,
+  LogicalResult rewritePtr(ArrayRef<int64_t> resultShape,
                            tts::MakeTensorPtrOp op, OpAdaptor adaptor,
                            ConversionPatternRewriter &rewriter) const {
 
@@ -537,7 +523,7 @@ private:
   rewriteStructuredPtr(tts::MakeTensorPtrOp op, OpAdaptor adaptor,
                        ConversionPatternRewriter &rewriter) const {
     ArrayRef<int64_t> resultShape = cast<ShapedType>(op.getType()).getShape();
-    return rewritePtr(resultShape, false, op, adaptor, rewriter);
+    return rewritePtr(resultShape, op, adaptor, rewriter);
   }
 
 public:
@@ -552,10 +538,6 @@ public:
       emitError(op.getLoc()) << "non-decreasing dimension order on tensor "
                                 "pointers are not yet supported";
       return failure();
-    }
-
-    if (op.isBlockPtr()) {
-      llvm_unreachable("Unexpected op type!");
     }
 
     if (op.isStructuredPtr()) {
