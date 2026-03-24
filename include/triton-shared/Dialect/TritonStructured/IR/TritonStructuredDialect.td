@@ -107,16 +107,11 @@ def TTS_MakeTensorPtrOp
       Builder b(getContext());
       return ::mlir::getMixedValues(getStaticShape(), getShape(), b);
     }
-    bool isBlockPtr() {
-      return !getOrder().empty();
-    }
     bool isStructuredPtr() {
-      return !isBlockPtr() &&
-             llvm::all_of(getStaticShape(), [](auto shape) { return shape == 0; });
+      return llvm::all_of(getStaticShape(), [](auto shape) { return shape == 0; });
     }
     bool isSplitPtr() {
-      return !isBlockPtr() &&
-             !isStructuredPtr();
+      return !isStructuredPtr();
     }
   }];
 

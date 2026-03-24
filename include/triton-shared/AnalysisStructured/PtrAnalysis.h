@@ -74,8 +74,6 @@ struct PtrState {
 
   bool isStructured() const;
 
-  bool isBlockPtr() const;
-
   void dump() const;
 
   // For unsupported op, save the op to the state.

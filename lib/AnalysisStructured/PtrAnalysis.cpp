@@ -144,10 +144,6 @@ bool PtrState::hasModulo() const {
 }
 
 bool PtrState::dimHasModulo(uint32_t dim) const {
-  assert(
-      !isBlockPtr() &&
-      "Analysis should not check modulo if PtrState describes block pointer");
-
   assert(dim < getRank());
 
   auto intAttr = getIntAttr(shape[dim]);
@@ -190,8 +186,6 @@ bool PtrState::isStructured() const {
   return llvm::all_of(
       offsets, [](OpFoldResult offset) { return !isNotStructured(offset); });
 }
-
-bool PtrState::isBlockPtr() const { return !order.empty(); }
 
 bool isNotSingleDim(Value v) {
   auto shapedTy = dyn_cast<ShapedType>(v.getType());
