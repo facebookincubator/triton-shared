@@ -557,6 +557,8 @@ struct SplatConverter : public OpConversionPattern<triton::SplatOp> {
                                  ValueRange{init})
               .result();
     } else {
+      // due to linalg.fill no longger support non-int/float types, we need to
+      // use tensor.splat directly for those types.
       filledTensor =
           tensor::SplatOp::create(rewriter, loc, opType, adaptor.getSrc());
     }
