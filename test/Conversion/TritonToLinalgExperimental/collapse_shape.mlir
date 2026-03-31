@@ -112,3 +112,52 @@ module {
     return %reduced : tensor<2x2x2x2x2x2x2x2x2xi64>
   }
 }
+
+// -----
+// CHECK: #[[$ATTR_0:.+]] = affine_map<(d0, d1, d2) -> (d0, d1, d2)>
+// CHECK: #[[$ATTR_1:.+]] = affine_map<(d0, d1, d2) -> (d0, d1)>
+// CHECK: #[[$ATTR_2:.+]] = affine_map<(d0, d1, d2) -> (d1)>
+// CHECK: #[[$ATTR_3:.+]] = affine_map<(d0, d1, d2) -> (d2)>
+// CHECK-LABEL:   func.func @main(
+// CHECK-SAME:                    %[[ARG0:.*]]: tensor<2x2x2x2x2x2x2x2x2x2xf16>) -> tensor<2x2x2x2x2x2x2x2x2x2xi32> {
+// CHECK:           %[[EMPTY_0:.*]] = tensor.empty() : tensor<2x2x2x2x2x2x2x2x2x2xi32>
+// CHECK:           %[[EMPTY_1:.*]] = tensor.empty() : tensor<2x2x2x2x2x2x2x2x2xi32>
+// CHECK:           %[[EMPTY_2:.*]] = tensor.empty() : tensor<2xi32>
+// CHECK:           %[[COLLAPSE_SHAPE_0:.*]] = tensor.collapse_shape %[[EMPTY_0]] {{\[\[}}0, 1, 2, 3, 4, 5, 6, 7], [8], [9]] : tensor<2x2x2x2x2x2x2x2x2x2xi32> into tensor<256x2x2xi32>
+// CHECK:           %[[COLLAPSE_SHAPE_1:.*]] = tensor.collapse_shape %[[EMPTY_1]] {{\[\[}}0, 1, 2, 3, 4, 5, 6, 7], [8]] : tensor<2x2x2x2x2x2x2x2x2xi32> into tensor<256x2xi32>
+// CHECK:           %[[COLLAPSE_SHAPE_2:.*]] = tensor.collapse_shape %[[EMPTY_0]] {{\[\[}}0, 1, 2, 3, 4, 5, 6, 7], [8], [9]] : tensor<2x2x2x2x2x2x2x2x2x2xi32> into tensor<256x2x2xi32>
+// CHECK:           %[[GENERIC_0:.*]] = linalg.generic {indexing_maps = [#[[$ATTR_0]], #[[$ATTR_1]], #[[$ATTR_2]], #[[$ATTR_3]], #[[$ATTR_0]]], iterator_types = ["parallel", "parallel", "parallel"]} ins(%[[COLLAPSE_SHAPE_0]], %[[COLLAPSE_SHAPE_1]], %[[EMPTY_2]], %[[EMPTY_2]] : tensor<256x2x2xi32>, tensor<256x2xi32>, tensor<2xi32>, tensor<2xi32>) outs(%[[COLLAPSE_SHAPE_2]] : tensor<256x2x2xi32>) {
+// CHECK:           ^bb0(%[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i32, %[[VAL_3:.*]]: i32, %[[VAL_4:.*]]: i32):
+// CHECK:             %[[XORI_0:.*]] = arith.xori %[[VAL_0]], %[[VAL_1]] : i32
+// CHECK:             %[[XORI_1:.*]] = arith.xori %[[VAL_2]], %[[VAL_3]] : i32
+// CHECK:             %[[CMPI_0:.*]] = arith.cmpi ugt, %[[VAL_0]], %[[XORI_0]] : i32
+// CHECK:             %[[EXTUI_0:.*]] = arith.extui %[[CMPI_0]] : i1 to i32
+// CHECK:             %[[CMPI_1:.*]] = arith.cmpi ne, %[[EXTUI_0]], %[[XORI_1]] : i32
+// CHECK:             %[[SELECT_0:.*]] = arith.select %[[CMPI_1]], %[[XORI_0]], %[[VAL_0]] : i32
+// CHECK:             linalg.yield %[[SELECT_0]] : i32
+// CHECK:           } -> tensor<256x2x2xi32>
+// CHECK:           %[[EXPAND_SHAPE_0:.*]] = tensor.expand_shape %[[GENERIC_0]] {{\[\[}}0, 1, 2, 3, 4, 5, 6, 7], [8], [9]] output_shape [2, 2, 2, 2, 2, 2, 2, 2, 2, 2] : tensor<256x2x2xi32> into tensor<2x2x2x2x2x2x2x2x2x2xi32>
+// CHECK:           return %[[EXPAND_SHAPE_0]] : tensor<2x2x2x2x2x2x2x2x2x2xi32>
+// CHECK:         }
+#map = affine_map<(d0, d1, d2, d3, d4, d5, d6, d7, d8, d9) -> (d0, d1, d2, d3, d4, d5, d6, d7, d8, d9)>
+#map1 = affine_map<(d0, d1, d2, d3, d4, d5, d6, d7, d8, d9) -> (d0, d1, d2, d3, d4, d5, d6, d7, d8)>
+#map2 = affine_map<(d0, d1, d2, d3, d4, d5, d6, d7, d8, d9) -> (d8)>
+#map3 = affine_map<(d0, d1, d2, d3, d4, d5, d6, d7, d8, d9) -> (d9)>
+module {
+  func.func @main(%arg0: tensor<2x2x2x2x2x2x2x2x2x2xf16>) -> tensor<2x2x2x2x2x2x2x2x2x2xi32> {
+    %0 = tensor.empty() : tensor<2x2x2x2x2x2x2x2x2x2xi32>
+    %1 = tensor.empty() : tensor<2x2x2x2x2x2x2x2x2xi32>
+    %2 = tensor.empty() : tensor<2xi32>
+    %3 = linalg.generic {indexing_maps = [#map, #map1, #map2, #map3, #map], iterator_types = ["parallel", "parallel", "parallel", "parallel", "parallel", "parallel", "parallel", "parallel", "parallel", "parallel"]} ins(%0, %1, %2, %2 : tensor<2x2x2x2x2x2x2x2x2x2xi32>, tensor<2x2x2x2x2x2x2x2x2xi32>, tensor<2xi32>, tensor<2xi32>) outs(%0 : tensor<2x2x2x2x2x2x2x2x2x2xi32>) {
+    ^bb0(%in: i32, %in_0: i32, %in_1: i32, %in_2: i32, %out: i32):
+      %4 = arith.xori %in, %in_0 : i32
+      %5 = arith.xori %in_1, %in_2 : i32
+      %6 = arith.cmpi ugt, %in, %4 : i32
+      %7 = arith.extui %6 : i1 to i32
+      %8 = arith.cmpi ne, %7, %5 : i32
+      %9 = arith.select %8, %4, %in : i32
+      linalg.yield %9 : i32
+    } -> tensor<2x2x2x2x2x2x2x2x2x2xi32>
+    return %3 : tensor<2x2x2x2x2x2x2x2x2x2xi32>
+  }
+}
