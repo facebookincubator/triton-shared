@@ -8,11 +8,12 @@
 #ifndef MLIR_DIALECT_TPTR_IR_TPTR_DIALECT_H_
 #define MLIR_DIALECT_TPTR_IR_TPTR_DIALECT_H_
 
-#include "mlir/Bytecode/BytecodeOpInterface.h"
-#include "mlir/Interfaces/SideEffectInterfaces.h" // Required for IR/TPtrOps.h.inc
+#include "triton/Dialect/Triton/IR/Traits.h"
 
+#include "mlir/Bytecode/BytecodeOpInterface.h"
 #include "mlir/Dialect/Ptr/IR/PtrDialect.h" // Required for IR/TPtrOps.h.inc
 #include "mlir/Dialect/Ptr/IR/PtrTypes.h"   // Required for IR/TPtrOps.h.inc
+#include "mlir/Interfaces/SideEffectInterfaces.h" // Required for IR/TPtrOps.h.inc
 
 //===----------------------------------------------------------------------===//
 // Temporary Pointer Dialect Operations

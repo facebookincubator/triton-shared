@@ -5,13 +5,14 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "mlir/IR/Builders.h"
-
 #include "triton-shared/Dialect/TPtr/IR/TPtrDialect.h"
 
 #include "mlir/Dialect/Ptr/IR/PtrDialect.h"
+#include "mlir/Dialect/Ptr/IR/PtrOps.h"
 #include "mlir/Dialect/Ptr/IR/PtrTypes.h"
+#include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
+
 #include "llvm/ADT/TypeSwitch.h"
 
 #define GET_TYPEDEF_CLASSES
@@ -100,9 +101,6 @@ bool tptr::DefaultMemorySpaceAttr::isValidPtrIntCast(
 //===----------------------------------------------------------------------===//
 // TableGen'd op method definitions
 //===----------------------------------------------------------------------===//
-
-#define GET_OP_CLASSES
-#include "triton-shared/Dialect/TPtr/IR/TPtrOps.cpp.inc"
 
 #define GET_ATTRDEF_CLASSES
 #include "triton-shared/Dialect/TPtr/IR/TPtrAttributes.cpp.inc"
