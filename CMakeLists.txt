@@ -26,7 +26,7 @@ if (TRITON_SHARED_BUILD_CPU_BACKEND)
     get_property(conversion_libs GLOBAL PROPERTY MLIR_CONVERSION_LIBS)
     get_property(extension_libs GLOBAL PROPERTY MLIR_EXTENSION_LIBS)
 
-    add_triton_plugin(TritonShared ${CMAKE_CURRENT_SOURCE_DIR}/triton_shared.cc LINK_LIBS TritonSharedAnalysis TritonTilingExtIR ${conversion_libs} ${extension_libs} MLIRSparseTensorTransforms MLIRControlFlowTransforms MLIRTensorInferTypeOpInterfaceImpl)
+    add_triton_plugin(TritonShared ${CMAKE_CURRENT_SOURCE_DIR}/triton_shared.cc LINK_LIBS TritonSharedAnalysis TritonTilingExtIR TPtrIR ${conversion_libs} ${extension_libs} MLIRSparseTensorTransforms MLIRControlFlowTransforms MLIRTensorInferTypeOpInterfaceImpl)
     target_link_libraries(TritonShared PRIVATE Python3::Module pybind11::headers)
 endif()
 
