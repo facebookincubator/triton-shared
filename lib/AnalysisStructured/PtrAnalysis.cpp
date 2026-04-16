@@ -886,6 +886,64 @@ LogicalResult PtrAnalysis::visitOperandExtSI(arith::ExtSIOp extOp,
   return visitOperand(extOp.getIn(), state, loc, builder);
 }
 
+LogicalResult PtrAnalysis::visitOperandMinMaxSI(Value lhs, Value rhs,
+                                                PtrState &state,
+                                                const Location loc,
+                                                OpBuilder &builder) {
+  PtrState lhsState;
+  if (visitOperand(lhs, lhsState, loc, builder).failed())
+    return failure();
+
+  PtrState rhsState;
+  if (visitOperand(rhs, rhsState, loc, builder).failed())
+    return failure();
+
+  // If one operand is a scalar bound and the other is a tensor of indices,
+  // propagate the tensor's state (the scalar is just a clamp bound).
+  if (lhsState.scalar && !rhsState.scalar && rhsState.getRank() > 0)
+    state = rhsState;
+  else if (rhsState.scalar && !lhsState.scalar && lhsState.getRank() > 0)
+    state = lhsState;
+  else if (lhsState.isStructured() && !rhsState.isStructured())
+    // Prefer the unstructured state for gather/scatter patterns.
+    state = rhsState;
+  else
+    // Default: use lhs state.
+    state = lhsState;
+
+  return success();
+}
+
+LogicalResult PtrAnalysis::visitOperandMinSI(arith::MinSIOp minOp,
+                                             PtrState &state,
+                                             const Location loc,
+                                             OpBuilder &builder) {
+  assert(state.isEmpty());
+  if (isAnalysisingUnstructured) {
+    assert(enableMakeGatherScatterTensorPtr &&
+           "PtrAnalysis: isAnalysisingUnstructured should only be true "
+           "when enableMakeGatherScatterTensorPtr is true");
+    return state.rebuildAsUnsupportedOp(minOp.getResult());
+  }
+  return visitOperandMinMaxSI(minOp.getLhs(), minOp.getRhs(), state, loc,
+                              builder);
+}
+
+LogicalResult PtrAnalysis::visitOperandMaxSI(arith::MaxSIOp maxOp,
+                                             PtrState &state,
+                                             const Location loc,
+                                             OpBuilder &builder) {
+  assert(state.isEmpty());
+  if (isAnalysisingUnstructured) {
+    assert(enableMakeGatherScatterTensorPtr &&
+           "PtrAnalysis: isAnalysisingUnstructured should only be true "
+           "when enableMakeGatherScatterTensorPtr is true");
+    return state.rebuildAsUnsupportedOp(maxOp.getResult());
+  }
+  return visitOperandMinMaxSI(maxOp.getLhs(), maxOp.getRhs(), state, loc,
+                              builder);
+}
+
 LogicalResult PtrAnalysis::visitOperandMakeRange(triton::MakeRangeOp rangeOp,
                                                  PtrState &state, Location loc,
                                                  OpBuilder &builder) {
@@ -1219,6 +1277,10 @@ LogicalResult PtrAnalysis::visitOperand(Value operand, PtrState &state,
     return visitOperandRem(op, state, loc, builder);
   } else if (auto op = operand.getDefiningOp<arith::ExtSIOp>()) {
     return visitOperandExtSI(op, state, loc, builder);
+  } else if (auto op = operand.getDefiningOp<arith::MinSIOp>()) {
+    return visitOperandMinSI(op, state, loc, builder);
+  } else if (auto op = operand.getDefiningOp<arith::MaxSIOp>()) {
+    return visitOperandMaxSI(op, state, loc, builder);
   } else if (auto op = operand.getDefiningOp<scf::ForOp>()) {
     return visitOperandForOp(op, operand, state, loc, builder);
   } else if (!operand.getDefiningOp()) {
