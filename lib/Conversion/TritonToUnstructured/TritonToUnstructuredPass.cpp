@@ -395,7 +395,7 @@ public:
                 })
                 .Case<tts::MakeGatherScatterTensorPtrOp>(
                     [&](Operation *op) { return success(); })    
-                .Case<triton::LoadOp, triton::StoreOp, triton::MakeTensorPtrOp,
+                .Case<triton::LoadOp, triton::StoreOp, triton::AtomicRMWOp,
                       tts::MakeTensorPtrOp>([&](Operation *op) {
                   // Special case:
                   // We do not want to create "unstructured tensor pointer" into
@@ -507,8 +507,18 @@ public:
                 store->erase();
                 return success();
               })
-              .Case<triton::MakeTensorPtrOp,
-                    tts::MakeTensorPtrOp>([&](auto makeTensorPtr) {
+              .Case<triton::AtomicRMWOp>([&](triton::AtomicRMWOp atomicOp) {
+                auto offsetInfo = offsetMap.at(atomicOp.getPtr());
+                auto newOp = tts::AtomicRMWOp::create(
+                    b, loc, atomicOp.getType(), offsetInfo.ptr,
+                    offsetInfo.offset, atomicOp.getVal(), atomicOp.getMask(),
+                    atomicOp.getAtomicRmwOp(), atomicOp.getSem(),
+                    atomicOp.getScope());
+                atomicOp->replaceAllUsesWith(newOp->getResults());
+                atomicOp->erase();
+                return success();
+              })
+              .Case<tts::MakeTensorPtrOp>([&](auto makeTensorPtr) {
                 // For block pointers, the base could come from a sequence of
                 // `tt.addptr`. Accumulate the target offset with the offset
                 // we have saved.
@@ -527,26 +537,26 @@ public:
 
                 if (baseOffType != currOffType) {
                   if (currOffType.isIndex()) {
-                    baseOffset = b.create<arith::IndexCastOp>(
-                        loc, b.getIndexType(), baseOffset);
+                    baseOffset = arith::IndexCastOp::create(
+                        b, loc, b.getIndexType(), baseOffset);
                   } else if (currOffType.isInteger()) {
                     if (baseOffType.getIntOrFloatBitWidth() <
                         currOffType.getIntOrFloatBitWidth()) {
-                      baseOffset = b.create<arith::ExtSIOp>(loc, currOffType,
-                                                            baseOffset);
+                      baseOffset = arith::ExtSIOp::create(b, loc, currOffType,
+                                                          baseOffset);
                     } else {
                       // MakeTensorPtrOp only takes i32 offsets, so we need
                       // to truncate if the offsets were already in i64
                       makeTensorPtr.emitWarning(
                           "truncating offsets which may result in data loss");
-                      baseOffset = b.create<arith::TruncIOp>(loc, currOffType,
-                                                             baseOffset);
+                      baseOffset = arith::TruncIOp::create(b, loc, currOffType,
+                                                           baseOffset);
                     }
                   }
                 }
 
-                auto accumulatedOffset = b.create<arith::AddIOp>(
-                    loc, currOffset.getType(), baseOffset, currOffset);
+                auto accumulatedOffset = arith::AddIOp::create(
+                    b, loc, currOffset.getType(), baseOffset, currOffset);
 
                 offsetOpnd.set(accumulatedOffset);
 

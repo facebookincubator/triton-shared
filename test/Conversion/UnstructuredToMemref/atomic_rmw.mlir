@@ -1,5 +1,6 @@
 // RUN: triton-shared-opt --triton-to-unstructured --canonicalize --unstructured-to-memref --canonicalize %s | FileCheck %s
 //
+// CHECK-DAG: #[[MAP:.+]] = affine_map<(d0) -> (d0)>
 
 module {
 
