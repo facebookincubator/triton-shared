@@ -147,6 +147,17 @@ class PtrAnalysis {
       scf::ForOp forOp, size_t ptrArgIndex, const PtrState &state,
       llvm::function_ref<Value(scf::ForOp op, size_t)> getReplacementVal);
 
+  // Shared implementation for visitOperandMinSI and visitOperandMaxSI.
+  // Main assumptions:
+  //  Current PtrState should be empty
+  // Expected result:
+  //  If lhsState is scalar: state = rhsState
+  //  If rhsState is scalar: state = lhsState
+  //  If lhsState is structured and rhsState is not: state = rhsState
+  //  Otherwise: state = lhsState
+  LogicalResult visitOperandMinMaxSI(Value lhs, Value rhs, PtrState &state,
+                                     const Location loc, OpBuilder &builder);
+
   DenseSet<Value> maybeStructuredArgs;
   const bool enableMakeGatherScatterTensorPtr;
   // If false, PtrAnalysis will analysis structured ptr while only identify
@@ -235,6 +246,16 @@ public:
 
   LogicalResult visitOperandRem(arith::RemSIOp mulOp, PtrState &state,
                                 const Location loc, OpBuilder &builder);
+
+  // Operand is the result of arith.minsi. Process both arguments.
+  // Current PtrState should be empty. See visitOperandMinMaxSI for semantics.
+  LogicalResult visitOperandMinSI(arith::MinSIOp minOp, PtrState &state,
+                                  const Location loc, OpBuilder &builder);
+
+  // Operand is the result of arith.maxsi. Process both arguments.
+  // Current PtrState should be empty. See visitOperandMinMaxSI for semantics.
+  LogicalResult visitOperandMaxSI(arith::MaxSIOp maxOp, PtrState &state,
+                                  const Location loc, OpBuilder &builder);
 
   // Operand is the result of make_range.
   // Main assumptions:
