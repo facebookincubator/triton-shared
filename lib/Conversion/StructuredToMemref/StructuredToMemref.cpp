@@ -545,6 +545,10 @@ public:
     }
 
     if (op.isSplitPtr()) {
+      // Treat rank-1 split pointers as regular pointers.
+      if (op.getStaticShape().size() == 1) {
+        return rewriteStructuredPtr(op, adaptor, rewriter);
+      }
       return rewriteSplitPtr(op, adaptor, rewriter);
     }
 
