@@ -39,6 +39,15 @@ using namespace triton;
 
 namespace {
 
+static SmallVector<ReassociationIndices>
+makeLinearReassociation(unsigned rank) {
+  SmallVector<ReassociationIndices> reassoc;
+  reassoc.emplace_back();
+  for (int64_t i = 0; i < (int64_t)rank; ++i)
+    reassoc.back().push_back(i);
+  return reassoc;
+}
+
 // This pattern collapses a `linalg.fill` operation that fills a tensor with a
 // single value into a `tensor.expand_shape` operation that expands a tensor
 // filled with the same value to a larger shape. This is useful for optimizing
@@ -76,11 +85,7 @@ struct CollapseFill : public OpRewritePattern<linalg::FillOp> {
         dyn_cast_or_null<StridedLayoutAttr>(resultType.getLayout())) {
       return failure();
     }
-    SmallVector<ReassociationExprs> reassociationMap;
-    reassociationMap.push_back({});
-    for (unsigned i = 0; i < rank; ++i) {
-      reassociationMap[0].push_back(rewriter.getAffineDimExpr(i));
-    }
+    auto reassociationMap = makeLinearReassociation(rank);
     auto elementType = resultType.getElementType();
 
     auto output = memref::CollapseShapeOp::create(
@@ -106,12 +111,7 @@ struct CollapseFill : public OpRewritePattern<linalg::FillOp> {
     }
     auto elementType = resultType.getElementType();
 
-    SmallVector<ReassociationExprs> reassociationMap;
-    reassociationMap.push_back({});
-    for (unsigned i = 0; i < rank; ++i) {
-      reassociationMap[0].push_back(rewriter.getAffineDimExpr(i));
-    }
-
+    auto reassociationMap = makeLinearReassociation(rank);
     auto init = tensor::CollapseShapeOp::create(
         rewriter, loc,
         RankedTensorType::get({resultType.getNumElements()}, elementType),
@@ -182,7 +182,7 @@ struct CollapseTranspose : public OpRewritePattern<linalg::TransposeOp> {
 
     SmallVector<int64_t> perm(op.getPermutation());
     SmallVector<int64_t> transposedShape(sourceRank);
-    SmallVector<ReassociationExprs> reassociationMap;
+    SmallVector<ReassociationIndices> reassociationMap;
     // from {1,1,1,2,2,1,1} to {1,4,1}
     SmallVector<int64_t> collapseShapeInput;
     int dim = 0;
@@ -201,7 +201,7 @@ struct CollapseTranspose : public OpRewritePattern<linalg::TransposeOp> {
         collapseShapeInput.push_back(1);
         reassociationMap.push_back({});
       }
-      reassociationMap[dim].push_back(rewriter.getAffineDimExpr(i));
+      reassociationMap[dim].push_back(i);
       mapDim.push_back(dim);
       collapseShapeInput[dim] *= sourceType.getDimSize(i);
     }
@@ -228,11 +228,12 @@ struct CollapseTranspose : public OpRewritePattern<linalg::TransposeOp> {
     source = tensor::CollapseShapeOp::create(rewriter, loc, sourceType, source,
                                              reassociationMap);
 
-    SmallVector<ReassociationExprs> reassociationMapRe(reassociationMap.size());
+    SmallVector<ReassociationIndices> reassociationMapRe(
+        reassociationMap.size());
     int idx = 0;
     for (size_t i = 0; i < reassociationMap.size(); ++i) {
       for (size_t j = 0; j < reassociationMap[perm[i]].size(); ++j) {
-        reassociationMapRe[i].push_back(rewriter.getAffineDimExpr(idx++));
+        reassociationMapRe[i].push_back(idx++);
       }
     }
 
@@ -314,7 +315,7 @@ struct CollapseBroadCast : public OpRewritePattern<linalg::GenericOp> {
     // collapse input tensor from {1,1,1,2,2,1,1} to {1,4,1}
     SmallVector<int64_t, 8> collapseShapeInput;
     SmallVector<int64_t, 8> collapseShapeOutput;
-    SmallVector<ReassociationExprs, 8> reassociationMap;
+    SmallVector<ReassociationIndices, 8> reassociationMap;
     int dim = 0;
     for (size_t i = 0; i < sourceRank; i++) {
       if (i > 0 && !((sourceType.getDimSize(i) == 1 &&
@@ -328,7 +329,7 @@ struct CollapseBroadCast : public OpRewritePattern<linalg::GenericOp> {
         collapseShapeOutput.push_back(1);
         reassociationMap.push_back({});
       }
-      reassociationMap[dim].push_back(rewriter.getAffineDimExpr(i));
+      reassociationMap[dim].push_back(i);
       collapseShapeInput[dim] *= sourceType.getDimSize(i);
       collapseShapeOutput[dim] *= resultType.getDimSize(i);
     }
@@ -423,7 +424,7 @@ struct CollapseReduce : public OpRewritePattern<linalg::ReduceOp> {
     // from {1,1,1,2,2,1,1} to {1,4,1}
     SmallVector<int64_t> collapseShapeInput;
     SmallVector<int64_t> newDims;
-    SmallVector<ReassociationExprs> reassociationMap;
+    SmallVector<ReassociationIndices> reassociationMap;
     int dim = 0;
     for (size_t i = 0; i < inputRank; i++) {
       bool reduceAxis = llvm::is_contained(dims, i);
@@ -438,7 +439,7 @@ struct CollapseReduce : public OpRewritePattern<linalg::ReduceOp> {
         collapseShapeInput.push_back(1);
         reassociationMap.push_back({});
       }
-      reassociationMap[dim].push_back(rewriter.getAffineDimExpr(i));
+      reassociationMap[dim].push_back(i);
       collapseShapeInput[dim] *= inputType.getDimSize(i);
     }
     if (collapseShapeInput.size() == inputRank) {
@@ -458,7 +459,7 @@ struct CollapseReduce : public OpRewritePattern<linalg::ReduceOp> {
     input = tensor::CollapseShapeOp::create(rewriter, loc, newInputType, input,
                                             reassociationMap);
 
-    SmallVector<ReassociationExprs> reassociationMapOutput;
+    SmallVector<ReassociationIndices> reassociationMapOutput;
     int idx = 0;
     for (size_t i = 0; i < reassociationMap.size(); ++i) {
       if (llvm::is_contained(newDims, i)) {
@@ -467,8 +468,7 @@ struct CollapseReduce : public OpRewritePattern<linalg::ReduceOp> {
         reassociationMapOutput.push_back({});
       }
       for (size_t j = 0; j < reassociationMap[i].size(); ++j) {
-        reassociationMapOutput.back().push_back(
-            rewriter.getAffineDimExpr(idx++));
+        reassociationMapOutput.back().push_back(idx++);
       }
     }
     auto init = tensor::CollapseShapeOp::create(
@@ -487,6 +487,403 @@ struct CollapseReduce : public OpRewritePattern<linalg::ReduceOp> {
   }
 };
 
+// this pattern collapses continuous parallel dimensions in a linalg.generic op
+// into one dimension, and generate expand_shape to recover the original shape.
+// This is useful for optimizing the performance of tensor operations that
+// involve many parallel dimensions.
+// for example:
+// before
+// ```
+// %3 = linalg.generic {indexing_maps = [#map, #map1, #map2, #map3,
+// #map], iterator_types = ["parallel", "parallel", "parallel",
+// "parallel", "parallel", "parallel", "parallel", "parallel",
+// "parallel", "parallel"]} ins(%0, %1, %2, %2 :
+// tensor<2x2x2x2x2x2x2x2x2x2xi32>, tensor<2x2x2x2x2x2x2x2x2xi32>,
+// tensor<2xi32>, tensor<2xi32>) outs(%0 :
+// tensor<2x2x2x2x2x2x2x2x2x2xi32>) {
+// ^bb0(%in: i32, %in_0: i32, %in_1: i32, %in_2: i32, %out: i32):
+//   %4 = arith.xori %in, %in_0 : i32
+//   %5 = arith.xori %in_1, %in_2 : i32
+//   %6 = arith.cmpi ugt, %in, %4 : i32
+//   %7 = arith.extui %6 : i1 to i32
+//   %8 = arith.cmpi ne, %7, %5 : i32
+//   %9 = arith.select %8, %4, %in : i32
+//   linalg.yield %9 : i32
+// } -> tensor<2x2x2x2x2x2x2x2x2x2xi32>
+// ```
+// after
+// ```
+// %collapsed = tensor.collapse_shape %0 [[0, 1, 2, 3, 4, 5, 6, 7], [8], [9]] :
+// tensor<2x2x2x2x2x2x2x2x2x2xi32> into tensor<256x2x2xi32> %collapsed_0 =
+// tensor.collapse_shape %1 [[0, 1, 2, 3, 4, 5, 6, 7], [8]] :
+// tensor<2x2x2x2x2x2x2x2x2xi32> into tensor<256x2xi32> %collapsed_1 =
+// tensor.collapse_shape %0 [[0, 1, 2, 3, 4, 5, 6, 7], [8], [9]] :
+// tensor<2x2x2x2x2x2x2x2x2x2xi32> into tensor<256x2x2xi32> %3 = linalg.generic
+// {indexing_maps = [#map, #map1, #map2, #map3, #map], iterator_types =
+// ["parallel", "parallel", "parallel"]} ins(%collapsed, %collapsed_0, %2, %2 :
+// tensor<256x2x2xi32>, tensor<256x2xi32>, tensor<2xi32>, tensor<2xi32>)
+// outs(%collapsed_1 : tensor<256x2x2xi32>) { ^bb0(%in: i32, %in_2: i32, %in_3:
+// i32, %in_4: i32, %out: i32):
+//   %4 = arith.xori %in, %in_2 : i32
+//   %5 = arith.xori %in_3, %in_4 : i32
+//   %6 = arith.cmpi ugt, %in, %4 : i32
+//   %7 = arith.extui %6 : i1 to i32
+//   %8 = arith.cmpi ne, %7, %5 : i32
+//   %9 = arith.select %8, %4, %in : i32
+//   linalg.yield %9 : i32
+// } -> tensor<256x2x2xi32>
+// %expanded = tensor.expand_shape %3 [[0, 1, 2, 3, 4, 5, 6, 7], [8], [9]]
+// output_shape [2, 2, 2, 2, 2, 2, 2, 2, 2, 2] : tensor<256x2x2xi32> into
+// tensor<2x2x2x2x2x2x2x2x2x2xi32>
+// ```
+struct FlattenGeneric final : OpRewritePattern<linalg::GenericOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  bool canExtendGroup(int64_t prefix, int64_t newDim,
+                      ArrayRef<AffineMap> maps) const {
+    SmallVector<bool> preFixFlag(maps.size(), false);
+    SmallVector<bool> newDimFlag(maps.size(), false);
+
+    // check newDim in all maps and tensors
+    for (unsigned i = 0; i < maps.size(); ++i) {
+      auto map = maps[i];
+
+      for (auto expr : map.getResults()) {
+        if (isa<AffineConstantExpr>(expr)) {
+          continue;
+        }
+        unsigned pos = cast<AffineDimExpr>(expr).getPosition();
+
+        // Only care about whether this result uses newDim.
+        if (pos != newDim) {
+          if (pos == prefix)
+            preFixFlag[i] = true;
+          continue;
+        }
+        if (newDimFlag[i])
+          return false;
+        newDimFlag[i] = true;
+      }
+    }
+    if (prefix >= 0 && preFixFlag != newDimFlag)
+      return false;
+    return true;
+  }
+
+  // find continuous parallel axis，generate reassociation
+  std::pair<SmallVector<ReassociationIndices>, SmallVector<utils::IteratorType>>
+  computeParallelReassociation(ArrayRef<utils::IteratorType> its,
+                               ArrayRef<AffineMap> maps) const {
+    SmallVector<ReassociationIndices> result;
+    SmallVector<utils::IteratorType> newIts;
+
+    int64_t n = its.size();
+    for (int64_t i = 0; i < n;) {
+      newIts.push_back(its[i]);
+
+      if (its[i] != utils::IteratorType::parallel) {
+        result.push_back({i});
+        ++i;
+        continue;
+      }
+
+      ReassociationIndices group = {i};
+      ++i;
+
+      while (i < n && its[i] == utils::IteratorType::parallel) {
+        if (!canExtendGroup(group.size() ? group.back() : -1, i, maps))
+          break;
+        group.push_back(i);
+        ++i;
+      }
+      result.push_back(group);
+    }
+    return {result, newIts};
+  }
+
+  SmallVector<Value> computeOriginalIndices(
+      const SmallVector<mlir::ReassociationIndices> &reassociationMap,
+      llvm::ArrayRef<int64_t> shape, PatternRewriter &rewriter,
+      Location loc) const {
+    unsigned rank = shape.size();
+    SmallVector<Value> newIndex(rank, nullptr);
+    // Iterate over each reassociation group (each group corresponds to one
+    // flattened dimension)
+    for (size_t i = 0; i < reassociationMap.size(); ++i) {
+      // The linear index corresponding to this flattened dimension
+      Value linearIdx = linalg::IndexOp::create(rewriter, loc, i);
+
+      // Expand each group into its original dimensions
+      const auto &group = reassociationMap[i];
+      if (group.empty())
+        continue;
+
+      Value idx = linearIdx;
+      // Compute the original index for each dimension in this group
+      for (size_t j = 0; j < group.size(); ++j) {
+        size_t dim = group[j];
+
+        // Compute the stride = product of the sizes of all subsequent
+        // dimensions in this group
+        int64_t strideVal = 1;
+        for (size_t k = j + 1; k < group.size(); ++k)
+          strideVal *= shape[group[k]];
+
+        Value stride = arith::ConstantIndexOp::create(rewriter, loc, strideVal);
+        // Compute the original index for this dimension using integer division
+        Value di = arith::DivUIOp::create(rewriter, loc, idx, stride);
+        newIndex[dim] = di;
+
+        if (j + 1 < group.size()) {
+          // Update the remaining linear index for the next dimension
+          idx = arith::RemUIOp::create(rewriter, loc, idx, stride);
+        }
+      }
+    }
+    return newIndex;
+  }
+
+  AffineMap
+  makeExpandMap(const SmallVector<mlir::ReassociationIndices> &reassoc,
+                ArrayRef<int64_t> oldShape, unsigned newRank,
+                MLIRContext *ctx) const {
+    // dims: d0..d(newRank-1)
+    SmallVector<AffineExpr> results(oldShape.size());
+
+    for (unsigned newPos = 0; newPos < reassoc.size(); ++newPos) {
+      auto &group = reassoc[newPos];
+      int64_t stride = 1;
+
+      // linearize from inner to outer.
+      for (int i = group.size() - 1; i >= 0; --i) {
+        int64_t oldDim = group[i];
+        auto d = getAffineDimExpr(newPos, ctx);
+        AffineExpr expr = d.floorDiv(stride);
+        if (oldShape[oldDim] > 1)
+          expr = expr % oldShape[oldDim];
+        results[oldDim] = expr;
+        stride *= oldShape[oldDim];
+      }
+    }
+
+    // the result is oldRank expressions.
+    return AffineMap::get(newRank, 0, results, ctx);
+  }
+
+  AffineMap
+  makeCollapseMap(const SmallVector<mlir::ReassociationIndices> &reassoc,
+                  ArrayRef<int64_t> oldShape, unsigned oldRank,
+                  MLIRContext *ctx) const {
+    SmallVector<AffineExpr> results;
+
+    for (unsigned newPos = 0; newPos < reassoc.size(); ++newPos) {
+      auto &group = reassoc[newPos];
+      AffineExpr expr = getAffineConstantExpr(0, ctx);
+
+      int64_t stride = 1;
+      for (int i = group.size() - 1; i >= 0; --i) {
+        int64_t oldDim = group[i];
+        auto d = getAffineDimExpr(oldDim, ctx);
+        expr = expr + d * stride;
+        stride *= oldShape[oldDim];
+      }
+
+      results.push_back(expr);
+    }
+
+    // the result is oldRank expressions
+    return AffineMap::get(oldRank, 0, results, ctx);
+  }
+
+  // remap old indexing map to new indexing map after collapse parallel dims
+  AffineMap remapIndexingMap(AffineMap oldMap,
+                             const SmallVector<ReassociationIndices> &reassoc,
+                             ArrayRef<int64_t> loopRanges, // old loop extents
+                             unsigned newRank, unsigned oldRank,
+                             MLIRContext *ctx) const {
+    auto expandMap = makeExpandMap(reassoc, loopRanges, newRank, ctx);
+    // old indexing_map: (i_old) -> (t_old)
+    auto tmp = oldMap.compose(expandMap); // old ∘ expand
+    auto collapseMap = makeCollapseMap(reassoc, loopRanges, oldRank, ctx);
+    bool dddd = collapseMap.compose(expandMap).isIdentity();
+    // new_map: (d_new) -> (t_new)
+    auto new_map = collapseMap.compose(tmp); // collapse ∘ (old ∘ expand)
+    return new_map;
+  }
+
+  AffineMap
+  remapIndexingMapPure(AffineMap oldMap,
+                       const SmallVector<ReassociationIndices> &reassoc,
+                       MLIRContext *ctx) const {
+    SmallVector<AffineExpr> newResults;
+    newResults.reserve(reassoc.size());
+
+    // old dim -> new dim
+    DenseMap<unsigned, unsigned> oldToNew;
+    for (unsigned newPos = 0; newPos < reassoc.size(); ++newPos)
+      for (int64_t oldPos : reassoc[newPos])
+        oldToNew[oldPos] = newPos;
+
+    int pos = -1;
+    for (auto it : llvm::enumerate(oldMap.getResults())) {
+      auto expr = it.value();
+      unsigned oldPos = isa<AffineConstantExpr>(expr)
+                            ? it.index()
+                            : cast<AffineDimExpr>(expr).getPosition();
+      unsigned newPos = oldToNew.lookup(oldPos);
+      if (newPos == pos)
+        continue;
+      pos = newPos;
+      newResults.push_back(
+          isa<AffineConstantExpr>(expr) ? expr : getAffineDimExpr(newPos, ctx));
+    }
+    assert(newResults.size() <= reassoc.size() &&
+           "pure remap must produce one result per reassoc group");
+
+    return AffineMap::get(reassoc.size(), 0, newResults, ctx);
+  }
+
+  bool isPureDimProjection(AffineMap map) const {
+    int64_t pos = -1;
+    for (auto expr : map.getResults()) {
+      auto d = dyn_cast<AffineDimExpr>(expr);
+      if (!d) {
+        if (auto c = dyn_cast<AffineConstantExpr>(expr)) {
+          if (c.getValue() == 0)
+            continue;
+        }
+        return false;
+      }
+      // bypass reshape,transpose may change the order of dim, but we only care
+      // about the relative order of parallel dims, so we allow non-parallel dim
+      // in between, but not allow parallel dim out of order
+      if (d.getPosition() <= pos)
+        return false;
+      pos = d.getPosition();
+    }
+    return true;
+  }
+
+  LogicalResult matchAndRewrite(linalg::GenericOp op,
+                                PatternRewriter &rewriter) const override {
+    // only support static shape for now
+    for (auto v : op.getOperands()) {
+      auto ty = dyn_cast<ShapedType>(v.getType());
+      if (!ty || !ty.hasStaticShape())
+        return failure();
+    }
+
+    // only support dim projection for now
+    for (auto m : op.getIndexingMapsArray()) {
+      if (!isPureDimProjection(m))
+        return failure();
+    }
+
+    auto [reassoc, newIts] = computeParallelReassociation(
+        op.getIteratorTypesArray(), op.getIndexingMapsArray());
+    bool hasCollapse =
+        llvm::any_of(reassoc, [](auto &g) { return g.size() > 1; });
+    if (!hasCollapse)
+      return failure();
+
+    llvm::MapVector<Value, SmallVector<ReassociationIndices>> operandReassoc;
+    for (int operandIdx = 0; operandIdx < op.getNumOperands(); operandIdx++) {
+      auto v = op.getOperand(operandIdx);
+      auto map = op.getIndexingMapsArray()[operandIdx];
+      SmallVector<ReassociationIndices> r;
+      for (auto &group : reassoc) {
+        ReassociationIndices g;
+        for (auto d : group) {
+          for (auto it : llvm::enumerate(map.getResults())) {
+            if (auto dim = dyn_cast<AffineDimExpr>(it.value()))
+              if (dim.getPosition() == d)
+                g.push_back(it.index());
+            if (isa<AffineConstantExpr>(it.value()))
+              if (it.index() == d)
+                g.push_back(it.index());
+          }
+        }
+        if (g.size())
+          r.push_back(g);
+      }
+      if (r.size())
+        operandReassoc.insert({v, r});
+    }
+
+    auto loc = op.getLoc();
+
+    auto collapse =
+        [&](Value v,
+            llvm::ArrayRef<mlir::ReassociationIndices> reassociation) -> Value {
+      if (isa<TensorType>(v.getType()))
+        return tensor::CollapseShapeOp::create(rewriter, loc, v, reassociation);
+      else
+        return memref::CollapseShapeOp::create(rewriter, loc, v, reassociation);
+    };
+
+    SmallVector<Value> newIns, newOuts;
+    for (auto in : op.getInputs())
+      newIns.push_back(collapse(in, operandReassoc[in]));
+    for (auto outv : op.getOutputs())
+      newOuts.push_back(collapse(outv, operandReassoc[outv]));
+
+    SmallVector<AffineMap> newMaps;
+    for (auto &indexMap : op.getIndexingMapsArray()) {
+      newMaps.push_back(
+          remapIndexingMapPure(indexMap, reassoc, op.getContext()));
+    }
+    SmallVector<Type> resultTypes;
+    for (auto out : newOuts)
+      resultTypes.push_back(out.getType());
+    auto newOp = linalg::GenericOp::create(rewriter, loc, resultTypes, newIns,
+                                           newOuts, newMaps, newIts);
+
+    // inline region
+    rewriter.inlineRegionBefore(op.getRegion(), newOp.getRegion(),
+                                newOp.getRegion().begin());
+
+    // remap index
+    auto &newBody = newOp.getRegion().front();
+    SmallVector<linalg::IndexOp> originalIndices;
+    for (auto idx : newBody.getOps<linalg::IndexOp>())
+      originalIndices.push_back(idx);
+
+    if (!originalIndices.empty()) {
+      OpBuilder::InsertionGuard guard(rewriter);
+      rewriter.setInsertionPointToStart(&newBody);
+      SmallVector<Value> newIndices = computeOriginalIndices(
+          reassoc, op.getStaticLoopRanges(), rewriter, loc);
+
+      for (auto idx : originalIndices) {
+        unsigned dim = idx.getDim();
+        if (!newIndices[dim])
+          return rewriter.notifyMatchFailure(
+              idx, "failed to compute original index");
+        rewriter.replaceOp(idx, newIndices[dim]);
+      }
+    }
+
+    auto expand =
+        [&](Value v, mlir::Type resultType,
+            llvm::ArrayRef<mlir::ReassociationIndices> reassociation) -> Value {
+      if (isa<TensorType>(resultType))
+        return tensor::ExpandShapeOp::create(rewriter, loc, resultType, v,
+                                             reassociation);
+      else
+        return memref::ExpandShapeOp::create(rewriter, loc, resultType, v,
+                                             reassociation);
+    };
+    SmallVector<Value> expands;
+    for (int idx = 0; idx < op.getOutputs().size(); ++idx) {
+      auto out = op.getOutputs()[idx];
+      expands.push_back(
+          expand(newOp.getResult(idx), out.getType(), operandReassoc[out]));
+    }
+    rewriter.replaceOp(op, expands);
+    return success();
+  }
+};
+
 class CollapseShapePasss
     : public ::impl::CollapseShapeBase<CollapseShapePasss> {
 
@@ -499,10 +896,8 @@ public:
     auto moduleOp = getOperation();
     RewritePatternSet patterns(&getContext());
     patterns.add<CollapseFill, CollapseBroadCast, CollapseTranspose,
-                 CollapseReduce>(&getContext());
-    if (failed(applyPatternsGreedily(moduleOp, std::move(patterns)))) {
-      signalPassFailure();
-    }
+                 CollapseReduce, FlattenGeneric>(&getContext());
+    (void)(applyPatternsGreedily(moduleOp, std::move(patterns)));
   }
 };
 
