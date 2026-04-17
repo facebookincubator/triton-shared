@@ -33,6 +33,6 @@ add_triton_library(TritonToLinalgExperimental
   StructuredToMemref
   TritonToStructured
   TritonToUnstructured
-  TritonPtrToMemref
+  TritonPtrToPtr
   UnstructuredToMemref
 )

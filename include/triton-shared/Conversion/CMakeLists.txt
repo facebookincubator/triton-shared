@@ -1,7 +1,7 @@
 add_subdirectory(TritonToLinalgExperimental)
 add_subdirectory(TritonToStructured)
 add_subdirectory(TritonArithToLinalg)
-add_subdirectory(TritonPtrToMemref)
+add_subdirectory(TritonPtrToPtr)
 add_subdirectory(TritonToUnstructured)
 add_subdirectory(StructuredToMemref)
 add_subdirectory(UnstructuredToMemref)

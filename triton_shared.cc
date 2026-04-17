@@ -8,8 +8,8 @@
 #include "passes.h"
 
 #include "triton-shared/Conversion/StructuredToMemref/StructuredToMemref.h"
+#include "triton-shared/Conversion/TPtrToLLVM/TPtrToLLVM.h"
 #include "triton-shared/Conversion/TritonArithToLinalg/TritonArithToLinalg.h"
-#include "triton-shared/Conversion/TritonPtrToMemref/TritonPtrToMemref.h"
 #include "triton-shared/Conversion/TritonToLinalgExperimental/CollapseShape.h"
 #include "triton-shared/Conversion/TritonToLinalgExperimental/ReconcilePtrCasts.h"
 #include "triton-shared/Conversion/TritonToLinalgExperimental/TritonToLinalgExperimental.h"
@@ -22,7 +22,9 @@
 #include "triton-shared/Dialect/TritonTilingExt/IR/TritonTilingExtDialect.h"
 #include "triton-shared/Transform/AddLLVMDebugInfo/AddLLVMDebugInfo.h"
 
+#include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVM.h"
 #include "mlir/Conversion/Passes.h"
+#include "mlir/Conversion/PtrToLLVM/PtrToLLVM.h"
 #include "mlir/Conversion/ReconcileUnrealizedCasts/ReconcileUnrealizedCasts.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Affine/Transforms/Passes.h"
@@ -33,6 +35,7 @@
 #include "mlir/Dialect/Bufferization/Transforms/FuncBufferizableOpInterfaceImpl.h"
 #include "mlir/Dialect/Bufferization/Transforms/Passes.h"
 #include "mlir/Dialect/ControlFlow/Transforms/BufferizableOpInterfaceImpl.h"
+#include "mlir/Dialect/Func/Extensions/AllExtensions.h"
 #include "mlir/Dialect/Linalg/Passes.h"
 #include "mlir/Dialect/Linalg/Transforms/BufferizableOpInterfaceImpl.h"
 #include "mlir/Dialect/Math/Transforms/Passes.h"
@@ -41,6 +44,7 @@
 #include "mlir/Dialect/SCF/Transforms/BufferizableOpInterfaceImpl.h"
 #include "mlir/Dialect/SCF/Transforms/Passes.h"
 #include "mlir/Dialect/SparseTensor/Transforms/BufferizableOpInterfaceImpl.h"
+#include "mlir/Dialect/Tensor/Extensions/AllExtensions.h"
 #include "mlir/Dialect/Tensor/IR/TensorInferTypeOpInterfaceImpl.h"
 #include "mlir/Dialect/Tensor/Transforms/BufferizableOpInterfaceImpl.h"
 #include "mlir/Dialect/Vector/Transforms/BufferizableOpInterfaceImpl.h"
@@ -56,9 +60,11 @@ using namespace mlir;
 void init_triton_triton_shared(py::module &&m) {
   m.doc() = "Python bindings to the triton-shared backend";
 
-  m.def("load_dialects", [](mlir::MLIRContext &context) {
-    mlir::DialectRegistry registry;
-    // registry.insert<mlir::triton::amdgpu::TritonAMDGPUDialect>();
+  m.def("load_dialects", [](MLIRContext &context) {
+    DialectRegistry registry;
+    mlir::tptr::registerConvertTPtrToLLVMInterface(registry);
+
+    // registry.insert<triton::amdgpu::TritonAMDGPUDialect>();
     arith::registerBufferizableOpInterfaceExternalModels(registry);
     bufferization::func_ext::registerBufferizableOpInterfaceExternalModels(
         registry);
@@ -70,7 +76,21 @@ void init_triton_triton_shared(py::module &&m) {
     cf::registerBufferizableOpInterfaceExternalModels(registry);
     tensor::registerInferTypeOpInterfaceExternalModels(registry);
 
-    mlir::bufferization::registerAllExtensions(registry);
+    // Register all conversions to LLVM extensions.
+    arith::registerConvertArithToLLVMInterface(registry);
+    bufferization::registerAllExtensions(registry);
+    registerConvertComplexToLLVMInterface(registry);
+    cf::registerConvertControlFlowToLLVMInterface(registry);
+    func::registerAllExtensions(registry);
+    tensor::registerAllExtensions(registry);
+    registerConvertFuncToLLVMInterface(registry);
+    index::registerConvertIndexToLLVMInterface(registry);
+    registerConvertMathToLLVMInterface(registry);
+    registerConvertMemRefToLLVMInterface(registry);
+    ptr::registerConvertPtrToLLVMInterface(registry);
+    ub::registerConvertUBToLLVMInterface(registry);
+    vector::registerConvertVectorToLLVMInterface(registry);
+    registerConvertX86ToLLVMInterface(registry);
 
     context.appendDialectRegistry(registry);
     context.loadAllAvailableDialects();
@@ -90,70 +110,69 @@ void init_triton_triton_shared(py::module &&m) {
   //===----------------------------------------------------------------------===//
 
   ADD_PASS_WRAPPER_0("add_convert_linalg_to_affine_loops",
-                     mlir::createConvertLinalgToAffineLoopsPass);
+                     createConvertLinalgToAffineLoopsPass);
 
   ADD_PASS_WRAPPER_0("add_eliminate_empty_tensors",
-                     mlir::bufferization::createEmptyTensorEliminationPass);
+                     bufferization::createEmptyTensorEliminationPass);
   ADD_PASS_WRAPPER_0("add_empty_tensor_to_alloc_tensor",
-                     mlir::bufferization::createEmptyTensorToAllocTensorPass);
+                     bufferization::createEmptyTensorToAllocTensorPass);
 
-  m.def("add_one_shot_bufferize", [](mlir::PassManager &pm) {
-    mlir::bufferization::OneShotBufferizePassOptions options;
+  m.def("add_one_shot_bufferize", [](PassManager &pm) {
+    bufferization::OneShotBufferizePassOptions options;
     options.allowReturnAllocsFromLoops = true;
-    pm.addPass(mlir::bufferization::createOneShotBufferizePass(options));
+    pm.addPass(bufferization::createOneShotBufferizePass(options));
   });
 
-  ADD_PASS_WRAPPER_0("add_lower_affine", mlir::createLowerAffinePass);
+  ADD_PASS_WRAPPER_0("add_lower_affine", createLowerAffinePass);
 
   ADD_PASS_WRAPPER_0("add_convert_linalg_to_loops",
-                     mlir::createConvertLinalgToLoopsPass);
+                     createConvertLinalgToLoopsPass);
 
   //===----------------------------------------------------------------------===//
   // SCF / CF
   //===----------------------------------------------------------------------===//
 
-  ADD_PASS_WRAPPER_0("add_convert_scf_to_cf", mlir::createSCFToControlFlowPass);
+  ADD_PASS_WRAPPER_0("add_convert_scf_to_cf", createSCFToControlFlowPass);
 
   //===----------------------------------------------------------------------===//
   // Metadata / MemRef
   //===----------------------------------------------------------------------===//
 
   ADD_PASS_WRAPPER_0("add_expand_strided_metadata",
-                     mlir::memref::createExpandStridedMetadataPass);
+                     memref::createExpandStridedMetadataPass);
 
-  ADD_PASS_WRAPPER_0("add_memref_expand", mlir::memref::createExpandOpsPass);
+  ADD_PASS_WRAPPER_0("add_memref_expand", memref::createExpandOpsPass);
 
   ADD_PASS_WRAPPER_0("add_finalize_memref_to_llvm",
-                     mlir::createFinalizeMemRefToLLVMConversionPass);
+                     createFinalizeMemRefToLLVMConversionPass);
 
   //===----------------------------------------------------------------------===//
   // LLVM Lowering
   //===----------------------------------------------------------------------===//
 
   ADD_PASS_WRAPPER_0("add_convert_arith_to_llvm",
-                     mlir::createArithToLLVMConversionPass);
+                     createArithToLLVMConversionPass);
 
   ADD_PASS_WRAPPER_0("add_convert_cf_to_llvm",
-                     mlir::createConvertControlFlowToLLVMPass);
-  ADD_PASS_WRAPPER_0("add_convert_math_to_llvm",
-                     mlir::createConvertMathToLLVMPass);
+                     createConvertControlFlowToLLVMPass);
+  ADD_PASS_WRAPPER_0("add_convert_math_to_llvm", createConvertMathToLLVMPass);
 
   ADD_PASS_WRAPPER_0("add_convert_complex_to_llvm",
-                     mlir::createConvertComplexToLLVMPass);
+                     createConvertComplexToLLVMPass);
 
   ADD_PASS_WRAPPER_0("add_convert_vector_to_llvm",
-                     mlir::createConvertVectorToLLVMPass);
+                     createConvertVectorToLLVMPass);
 
-  ADD_PASS_WRAPPER_0("add_convert_index_to_llvm",
-                     mlir::createConvertIndexToLLVMPass);
+  ADD_PASS_WRAPPER_0("add_convert_index_to_llvm", createConvertIndexToLLVMPass);
 
-  ADD_PASS_WRAPPER_0("add_convert_func_to_llvm",
-                     mlir::createConvertFuncToLLVMPass);
+  ADD_PASS_WRAPPER_0("add_convert_func_to_llvm", createConvertFuncToLLVMPass);
+
+  ADD_PASS_WRAPPER_0("add_convert_to_llvm", createConvertToLLVMPass);
 
   //===----------------------------------------------------------------------===//
   // Cleanup
   //===----------------------------------------------------------------------===//
 
   ADD_PASS_WRAPPER_0("add_reconcile_unrealized_casts",
-                     mlir::createReconcileUnrealizedCastsPass);
+                     createReconcileUnrealizedCastsPass);
 }

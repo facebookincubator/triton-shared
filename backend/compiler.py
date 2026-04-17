@@ -169,6 +169,8 @@ class CPUBackend(BaseBackend):
             # has to run before the other passes as operates on the tt dialect
             triton_shared.add_llvm_debug_info(pm)
         triton_shared.add_triton_to_linalg_experimental(pm)
+        passes.common.add_canonicalizer(pm)
+        passes.common.add_cse(pm)
         pm.run(mod, 'make_tt_shared_ir')
         return mod
 
@@ -191,22 +193,16 @@ class CPUBackend(BaseBackend):
         triton_shared.add_convert_linalg_to_loops(pm)
         triton_shared.add_expand_strided_metadata(pm)
         triton_shared.add_convert_scf_to_cf(pm)
-        triton_shared.add_convert_arith_to_llvm(pm)
-        triton_shared.add_convert_math_to_llvm(pm)
-        triton_shared.add_convert_complex_to_llvm(pm)
-        triton_shared.add_convert_vector_to_llvm(pm)
-        triton_shared.add_convert_index_to_llvm(pm)
         triton_shared.add_memref_expand(pm)
-        triton_shared.add_finalize_memref_to_llvm(pm)
-        triton_shared.add_convert_func_to_llvm(pm)
-        triton_shared.add_convert_cf_to_llvm(pm)
         # Lowering memrefs creates more affine.apply ops.
         # Lowering these affine ops again creates further arith ops,
         # so we have to run these two passes again here.
         triton_shared.add_lower_affine(pm)
-        triton_shared.add_convert_arith_to_llvm(pm)
+        triton_shared.add_convert_to_llvm(pm)
         # Remove all unrealized casts created
         triton_shared.add_reconcile_unrealized_casts(pm)
+        passes.common.add_canonicalizer(pm)
+        passes.common.add_cse(pm)
         pm.run(mod, 'make_llir')
 
         # LLVM-IR (MLIR) -> LLVM-IR (LLVM)

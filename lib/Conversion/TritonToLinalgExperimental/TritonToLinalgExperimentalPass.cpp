@@ -8,7 +8,7 @@
 #include "mlir/Dialect/Ptr/IR/PtrDialect.h"
 #include "triton-shared/Conversion/StructuredToMemref/StructuredToMemref.h"
 #include "triton-shared/Conversion/TritonArithToLinalg/TritonArithToLinalg.h"
-#include "triton-shared/Conversion/TritonPtrToMemref/TritonPtrToMemref.h"
+#include "triton-shared/Conversion/TritonPtrToPtr/TritonPtrToPtr.h"
 #include "triton-shared/Conversion/TritonToLinalgExperimental/CollapseShape.h"
 #include "triton-shared/Conversion/TritonToLinalgExperimental/ReconcilePtrCasts.h"
 #include "triton-shared/Conversion/TritonToLinalgExperimental/TritonToLinalgExperimental.h"
@@ -66,7 +66,7 @@ public:
 
     pm.addPass(createStructuredToMemrefPass());
     pm.addPass(createUnstructuredToMemrefPass());
-    pm.addPass(createTritonPtrToMemrefPass());
+    pm.addPass(createTritonPtrToPtrPass());
     pm.addPass(createTritonToPtrPass());
     pm.addPass(createReconcileUnrealizedCastsPass());
     pm.addPass(createReconcilePtrCastsPass());
