@@ -64,8 +64,10 @@ module {
 // CHECK-DAG:         [[VAR_5_:%.+]] = arith.addi [[VAR_arg13_]], [[CST_3_]] : index
 // CHECK:             [[VAR_6_:%.+]] = arith.addi [[VAR_3_]], [[VAR_4_]] : index
 // CHECK:             [[VAR_7_:%.+]] = arith.addi [[VAR_6_]], [[VAR_5_]] : index
-// CHECK:             [[VAR_8_:%.+]] = arith.addi [[VAR_arg12_]], [[VAR_7_]] : index
-// CHECK:             scf.yield [[VAR_3_]], [[VAR_2_]], [[VAR_4_]], [[VAR_8_]], [[VAR_5_]] : index, index, index, index, index
+// CHECK:             [[VAR_8_:%.+]] = arith.index_cast [[VAR_7_]] : index to i32
+// CHECK:             [[VAR_9_:%.+]] = arith.index_cast [[VAR_8_]] : i32 to index
+// CHECK:             [[VAR_10_:%.+]] = arith.addi [[VAR_arg12_]], [[VAR_9_]] : index
+// CHECK:             scf.yield [[VAR_3_]], [[VAR_2_]], [[VAR_4_]], [[VAR_10_]], [[VAR_5_]] : index, index, index, index, index
 // CHECK:           }
 // CHECK:           return
 // CHECK:         }
