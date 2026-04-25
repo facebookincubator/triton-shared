@@ -297,13 +297,10 @@ def TTS_ScatterOp : TTS_Op<"scatter", [
   }];
 }
 
-def TTS_LoadOp : TTS_Op<"load", [
-  MemoryEffects<[MemRead]>,
-  AttrSizedOperandSegments
-]> {
+def TTS_LoadOp : TTS_Op<"load", [AttrSizedOperandSegments]> {
   let summary = "optionally load data from in memory to fill a portion of the tensor";
 
-  let arguments = (ins TT_PtrLike:$ptr,
+  let arguments = (ins Arg<TT_PtrLike, "", [MemRead]>:$ptr,
                        Variadic<Index>:$mask_dims,
                        DenseI64ArrayAttr:$static_mask_dims,
                        Optional<AnyTypeOf<[TT_Float, TT_Int, TT_Ptr]>>:$other);
@@ -331,12 +328,10 @@ def TTS_LoadOp : TTS_Op<"load", [
   //let hasVerifier = 1;
 }
 
-def TTS_StoreOp : TTS_Op<"store", [
-  MemoryEffects<[MemWrite]>
-]> {
+def TTS_StoreOp : TTS_Op<"store", []> {
   let summary = "optionally store data from in memory to fill a portion of the tensor";
 
-  let arguments = (ins TT_PtrLike:$ptr,
+  let arguments = (ins Arg<TT_PtrLike, "", [MemRead, MemWrite]>:$ptr,
                        TT_Tensor:$value,
                        Variadic<Index>:$mask_dims,
                        DenseI64ArrayAttr:$static_mask_dims);
