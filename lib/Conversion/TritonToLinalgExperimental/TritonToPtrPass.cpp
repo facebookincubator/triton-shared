@@ -31,6 +31,7 @@
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
+#include "mlir/Dialect/Bufferization/IR/Bufferization.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -67,6 +68,133 @@ namespace {
 
 #define GEN_PASS_DEF_TRITONTOPTR
 #include "triton-shared/Conversion/TritonToLinalgExperimental/Passes.h.inc"
+
+static constexpr StringLiteral kDescPaddingAttr = "tt.descriptor_padding";
+
+static Value castToIndex(OpBuilder &builder, Location loc, Value value) {
+  if (value.getType().isIndex())
+    return value;
+  return arith::IndexCastOp::create(builder, loc, builder.getIndexType(),
+                                    value);
+}
+
+static SmallVector<Value> castToIndex(OpBuilder &builder, Location loc,
+                                      ValueRange values) {
+  return llvm::map_to_vector(
+      values, [&](Value value) { return castToIndex(builder, loc, value); });
+}
+
+static memref::SubViewOp getSubview(Value source, ValueRange offsets,
+                                    ValueRange sizes, Location loc,
+                                    OpBuilder &builder) {
+  auto sourceType = cast<MemRefType>(source.getType());
+  SmallVector<OpFoldResult> mixedOffsets(offsets.begin(), offsets.end());
+  SmallVector<OpFoldResult> mixedSizes(sizes.begin(), sizes.end());
+  SmallVector<OpFoldResult> mixedStrides(sourceType.getRank(),
+                                         builder.getIndexAttr(1));
+  auto dstType = memref::SubViewOp::inferResultType(sourceType, mixedOffsets,
+                                                    mixedSizes, mixedStrides);
+  return memref::SubViewOp::create(builder, loc, cast<MemRefType>(dstType),
+                                   source, mixedOffsets, mixedSizes,
+                                   mixedStrides);
+}
+
+static tensor::ExtractSliceOp getExtractSlice(Value source, ValueRange sizes,
+                                              Location loc,
+                                              OpBuilder &builder) {
+  auto sourceType = cast<RankedTensorType>(source.getType());
+  SmallVector<OpFoldResult> offsets(sourceType.getRank(),
+                                    builder.getIndexAttr(0));
+  SmallVector<OpFoldResult> mixedSizes(sizes.begin(), sizes.end());
+  SmallVector<OpFoldResult> strides(sourceType.getRank(),
+                                    builder.getIndexAttr(1));
+  auto sliceType =
+      tensor::ExtractSliceOp::inferResultType(sourceType, mixedSizes);
+  return tensor::ExtractSliceOp::create(builder, loc, sliceType, source,
+                                        offsets, mixedSizes, strides);
+}
+
+static Value getPadValue(OpBuilder &builder, Location loc, Type elementType,
+                         triton::PaddingOption padding) {
+  if (padding == triton::PaddingOption::PAD_NAN &&
+      isa<FloatType>(elementType)) {
+    auto floatType = cast<FloatType>(elementType);
+    auto nan = llvm::APFloat::getNaN(floatType.getFloatSemantics());
+    return arith::ConstantFloatOp::create(builder, loc, floatType, nan);
+  }
+  return arith::ConstantOp::create(builder, loc,
+                                   builder.getZeroAttr(elementType));
+}
+
+static triton::PaddingOption getPaddingFromDesc(Value desc) {
+  if (auto castOp = desc.getDefiningOp<memref::ReinterpretCastOp>()) {
+    if (auto attr = dyn_cast_or_null<triton::PaddingOptionAttr>(
+            castOp->getAttr(kDescPaddingAttr))) {
+      return attr.getValue();
+    }
+  }
+  return triton::PaddingOption::PAD_ZERO;
+}
+
+static Type convertPointerType(MLIRContext *context,
+                               triton::PointerType ptrType) {
+  return ptr::PtrType::get(context, tptr::DefaultMemorySpaceAttr::get(context));
+}
+
+static Type convertTensorType(MLIRContext *context,
+                              RankedTensorType tensorType) {
+  if (!isa<triton::PointerType>(tensorType.getElementType()))
+    return tensorType;
+
+  return RankedTensorType::get(
+      tensorType.getShape(),
+      ptr::PtrType::get(context, tptr::DefaultMemorySpaceAttr::get(context)));
+}
+
+static Type convertTensorDescType(MLIRContext *context,
+                                  triton::TensorDescType descType) {
+  auto rank = descType.getShape().size();
+  SmallVector<int64_t> dynamicShape(rank, ShapedType::kDynamic);
+  SmallVector<int64_t> dynamicStrides(rank, ShapedType::kDynamic);
+  auto layout =
+      StridedLayoutAttr::get(context, ShapedType::kDynamic, dynamicStrides);
+  return MemRefType::get(
+      dynamicShape, descType.getSignlessBlockType().getElementType(), layout);
+}
+
+struct BoundedTransferInfo {
+  SmallVector<Value> sizes;
+  Value needsPad;
+};
+
+static BoundedTransferInfo getBoundedTransferInfo(Value desc,
+                                                  ValueRange indices,
+                                                  ArrayRef<int64_t> blockShape,
+                                                  Location loc,
+                                                  OpBuilder &builder) {
+  BoundedTransferInfo info;
+  info.needsPad = nullptr;
+
+  for (auto [dim, staticSize] : llvm::enumerate(blockShape)) {
+    Value size = memref::DimOp::create(builder, loc, desc, dim);
+    Value expected = arith::ConstantIndexOp::create(builder, loc, staticSize);
+    Value available = arith::SubIOp::create(builder, loc, size, indices[dim]);
+    Value tooSmall = arith::CmpIOp::create(
+        builder, loc, arith::CmpIPredicate::slt, available, expected);
+    Value clamped =
+        arith::SelectOp::create(builder, loc, tooSmall, available, expected);
+    info.sizes.push_back(clamped);
+
+    if (!info.needsPad) {
+      info.needsPad = tooSmall;
+    } else {
+      info.needsPad =
+          arith::OrIOp::create(builder, loc, info.needsPad, tooSmall);
+    }
+  }
+
+  return info;
+}
 
 // Convert tensor.insert_slice to use ptr.ptr type. This insert_slice op must
 // have been lowered from tl.cat
@@ -317,6 +445,160 @@ struct PtrToIntConverter : public OpConversionPattern<triton::PtrToIntOp> {
   }
 };
 
+// Convert tt.make_tensor_descriptor to memref.reinterpret_cast.
+struct MakeTensorDescConverter
+    : public OpConversionPattern<triton::MakeTensorDescOp> {
+  using OpConversionPattern<triton::MakeTensorDescOp>::OpConversionPattern;
+
+  MakeTensorDescConverter(const TypeConverter &typeConverter,
+                          MLIRContext *context)
+      : OpConversionPattern<triton::MakeTensorDescOp>(typeConverter, context) {}
+
+  LogicalResult
+  matchAndRewrite(triton::MakeTensorDescOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto loc = op.getLoc();
+    auto resultType =
+        cast<MemRefType>(getTypeConverter()->convertType(op.getType()));
+
+    Value source = nullptr;
+    if (auto castOp =
+            op.getBase().getDefiningOp<UnrealizedConversionCastOp>()) {
+      if (castOp.getInputs().size() == 1 &&
+          isa<BaseMemRefType>(castOp.getInputs()[0].getType())) {
+        source = castOp.getInputs()[0];
+      }
+    } else if (isa<BaseMemRefType>(op.getBase().getType())) {
+      source = op.getBase();
+    }
+
+    if (!source) {
+      auto ptrType = cast<ptr::PtrType>(adaptor.getBase().getType());
+      auto fallbackType = MemRefType::get(
+          {ShapedType::kDynamic}, resultType.getElementType(),
+          MemRefLayoutAttrInterface{}, ptrType.getMemorySpace());
+      source = ptr::FromPtrOp::create(rewriter, loc, fallbackType,
+                                      adaptor.getBase());
+    }
+
+    auto zero = arith::ConstantIndexOp::create(rewriter, loc, 0);
+    auto sizes = castToIndex(rewriter, loc, adaptor.getShape());
+    auto strides = castToIndex(rewriter, loc, adaptor.getStrides());
+
+    auto castOp = rewriter.replaceOpWithNewOp<memref::ReinterpretCastOp>(
+        op, resultType, source, zero, sizes, strides);
+    castOp->setAttr(
+        kDescPaddingAttr,
+        triton::PaddingOptionAttr::get(rewriter.getContext(), op.getPadding()));
+    return success();
+  }
+};
+
+// Convert tt.descriptor_load to memref.copy
+struct DescriptorLoadConverter
+    : public OpConversionPattern<triton::DescriptorLoadOp> {
+  using OpConversionPattern<triton::DescriptorLoadOp>::OpConversionPattern;
+
+  DescriptorLoadConverter(const TypeConverter &typeConverter,
+                          MLIRContext *context)
+      : OpConversionPattern<triton::DescriptorLoadOp>(typeConverter, context) {}
+
+  LogicalResult
+  matchAndRewrite(triton::DescriptorLoadOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto loc = op.getLoc();
+    auto desc = adaptor.getDesc();
+    auto descType = op.getDesc().getType();
+    auto resultType = cast<RankedTensorType>(op.getType());
+    auto blockShape = llvm::to_vector(descType.getShape());
+
+    if (static_cast<int64_t>(blockShape.size()) != resultType.getRank() ||
+        !llvm::equal(blockShape, resultType.getShape())) {
+      return rewriter.notifyMatchFailure(
+          op, "descriptor load currently expects result shape to match block "
+              "shape");
+    }
+
+    auto indices = castToIndex(rewriter, loc, adaptor.getIndices());
+    auto transferInfo =
+        getBoundedTransferInfo(desc, indices, blockShape, loc, rewriter);
+
+    auto allocType =
+        MemRefType::get(resultType.getShape(), resultType.getElementType());
+    auto alloc = memref::AllocOp::create(rewriter, loc, allocType);
+
+    auto padding = getPaddingFromDesc(desc);
+    auto padValue =
+        getPadValue(rewriter, loc, resultType.getElementType(), padding);
+
+    scf::IfOp::create(rewriter, loc, transferInfo.needsPad,
+                      [&](OpBuilder &b, Location nestedLoc) {
+                        linalg::FillOp::create(b, nestedLoc,
+                                               ValueRange{padValue},
+                                               ValueRange{alloc});
+                        scf::YieldOp::create(b, nestedLoc);
+                      });
+
+    auto srcSubview =
+        getSubview(desc, indices, transferInfo.sizes, loc, rewriter);
+    SmallVector<Value> zeroOffsets(transferInfo.sizes.size());
+    llvm::transform(transferInfo.sizes, zeroOffsets.begin(), [&](Value) {
+      return arith::ConstantIndexOp::create(rewriter, loc, 0);
+    });
+    auto dstSubview =
+        getSubview(alloc, zeroOffsets, transferInfo.sizes, loc, rewriter);
+    memref::CopyOp::create(rewriter, loc, srcSubview, dstSubview);
+
+    Value tensor = bufferization::ToTensorOp::create(
+        rewriter, loc, resultType, alloc, true /*restrict*/, true /*writable*/);
+    rewriter.replaceOp(op, tensor);
+    return success();
+  }
+};
+
+// Convert tt.descriptor_store to subview + materialize_in_destination.
+struct DescriptorStoreConverter
+    : public OpConversionPattern<triton::DescriptorStoreOp> {
+  using OpConversionPattern<triton::DescriptorStoreOp>::OpConversionPattern;
+
+  DescriptorStoreConverter(const TypeConverter &typeConverter,
+                           MLIRContext *context)
+      : OpConversionPattern<triton::DescriptorStoreOp>(typeConverter, context) {
+  }
+
+  LogicalResult
+  matchAndRewrite(triton::DescriptorStoreOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto loc = op.getLoc();
+    auto desc = adaptor.getDesc();
+    auto descType = op.getDesc().getType();
+    auto srcType = cast<RankedTensorType>(op.getSrc().getType());
+    auto blockShape = llvm::to_vector(descType.getShape());
+
+    if (static_cast<int64_t>(blockShape.size()) != srcType.getRank() ||
+        !llvm::equal(blockShape, srcType.getShape())) {
+      return rewriter.notifyMatchFailure(
+          op, "descriptor store currently expects source shape to match block "
+              "shape");
+    }
+
+    auto indices = castToIndex(rewriter, loc, adaptor.getIndices());
+    auto transferInfo =
+        getBoundedTransferInfo(desc, indices, blockShape, loc, rewriter);
+
+    auto srcSlice =
+        getExtractSlice(op.getSrc(), transferInfo.sizes, loc, rewriter);
+    auto dstSubview =
+        getSubview(desc, indices, transferInfo.sizes, loc, rewriter);
+    auto storeOp = bufferization::MaterializeInDestinationOp::create(
+        rewriter, loc, srcSlice, dstSubview);
+    storeOp.setWritable(true);
+
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
 // Convert tt.int_to_ptr to ptr.ptrtoint
 struct IntToPtrConverter : public OpConversionPattern<triton::IntToPtrOp> {
   using OpConversionPattern<triton::IntToPtrOp>::OpConversionPattern;
@@ -423,19 +705,14 @@ struct LinalgFillPtrConverter : public OpConversionPattern<tensor::SplatOp> {
 class TritonPtrTypeConverter : public TypeConverter {
 public:
   TritonPtrTypeConverter(MLIRContext *context) {
-    addConversion([](Type type) { return type; });
-    addConversion([context](triton::PointerType ptrType) {
-      return ptr::PtrType::get(context,
-                               tptr::DefaultMemorySpaceAttr::get(context));
-    });
-    addConversion([context](RankedTensorType tensorType) {
-      if (isa<triton::PointerType>(tensorType.getElementType())) {
-        return RankedTensorType::get(
-            tensorType.getShape(),
-            ptr::PtrType::get(context,
-                              tptr::DefaultMemorySpaceAttr::get(context)));
-      }
-      return tensorType;
+    addConversion([context](Type type) -> Type {
+      if (auto ptrType = dyn_cast<triton::PointerType>(type))
+        return convertPointerType(context, ptrType);
+      if (auto tensorType = dyn_cast<RankedTensorType>(type))
+        return convertTensorType(context, tensorType);
+      if (auto descType = dyn_cast<triton::TensorDescType>(type))
+        return convertTensorDescType(context, descType);
+      return type;
     });
     auto createCast = [&](OpBuilder &builder, Type resultType,
                           ValueRange inputs, Location loc) -> Value {
@@ -452,10 +729,12 @@ class TritonToPtrPass : public impl::TritonToPtrBase<TritonToPtrPass> {
 
 public:
   void getDependentDialects(DialectRegistry &registry) const override {
-    registry.insert<
-        arith::ArithDialect, math::MathDialect, affine::AffineDialect,
-        scf::SCFDialect, tensor::TensorDialect, triton::TritonDialect,
-        tts::TritonStructuredDialect, ptr::PtrDialect, tptr::TPtrDialect>();
+    registry.insert<arith::ArithDialect, math::MathDialect,
+                    affine::AffineDialect, bufferization::BufferizationDialect,
+                    scf::SCFDialect, tensor::TensorDialect,
+                    linalg::LinalgDialect, memref::MemRefDialect,
+                    triton::TritonDialect, tts::TritonStructuredDialect,
+                    ptr::PtrDialect, tptr::TPtrDialect>();
   }
 
   void runOnOperation() override {
@@ -466,7 +745,8 @@ public:
     TritonPtrTypeConverter typeConverter(&getContext());
 
     target.addIllegalOp<triton::AddPtrOp, triton::BitcastOp, triton::IntToPtrOp,
-                        triton::PtrToIntOp>();
+                        triton::PtrToIntOp, triton::DescriptorLoadOp,
+                        triton::DescriptorStoreOp, triton::MakeTensorDescOp>();
 
     // We do not want to lower triton load and store on block pointers
     target.addDynamicallyLegalOp<triton::LoadOp, triton::StoreOp>([](auto op) {
@@ -483,17 +763,18 @@ public:
               [&](Value v) { return !triton::isPtrTypeLike(v.getType()); });
         });
 
-    target.addLegalDialect<arith::ArithDialect, linalg::LinalgDialect,
-                           tensor::TensorDialect, affine::AffineDialect,
-                           tptr::TPtrDialect, ptr::PtrDialect,
-                           memref::MemRefDialect>();
+    target.addLegalDialect<
+        arith::ArithDialect, linalg::LinalgDialect, tensor::TensorDialect,
+        affine::AffineDialect, bufferization::BufferizationDialect,
+        tptr::TPtrDialect, ptr::PtrDialect, memref::MemRefDialect>();
 
     patterns
         .add<AddPtrConverter, BitCastConverter, StoreConverter, LoadConverter,
-             PtrToIntConverter, IntToPtrConverter, ExpandShapeConverter,
-             SelectOpConverter, InsertSliceConverter, EmptyTensorConverter,
-             LinalgFillPtrConverter, LinalgPtrConverter, LinalgYieldConverter>(
-            typeConverter, patterns.getContext());
+             PtrToIntConverter, IntToPtrConverter, MakeTensorDescConverter,
+             DescriptorLoadConverter, DescriptorStoreConverter,
+             ExpandShapeConverter, SelectOpConverter, InsertSliceConverter,
+             EmptyTensorConverter, LinalgFillPtrConverter, LinalgPtrConverter,
+             LinalgYieldConverter>(typeConverter, patterns.getContext());
 
     mlir::scf::populateSCFStructuralTypeConversionsAndLegality(
         typeConverter, patterns, target);

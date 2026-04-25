@@ -82,6 +82,22 @@ void init_triton_triton_shared(py::module &&m) {
 
   ADD_PASS_WRAPPER_0("add_triton_to_linalg_experimental",
                      triton::createTritonToLinalgExperimentalPass);
+  ADD_PASS_WRAPPER_1("add_triton_to_structured",
+                     triton::createTritonToStructuredPass, bool);
+  ADD_PASS_WRAPPER_0("add_triton_to_unstructured",
+                     triton::createTritonToUnstructuredPass);
+  ADD_PASS_WRAPPER_1("add_triton_arith_to_linalg",
+                     triton::createTritonArithToLinalgPass, bool);
+  ADD_PASS_WRAPPER_0("add_structured_to_memref",
+                     triton::createStructuredToMemrefPass);
+  ADD_PASS_WRAPPER_0("add_unstructured_to_memref",
+                     triton::createUnstructuredToMemrefPass);
+  ADD_PASS_WRAPPER_0("add_triton_ptr_to_memref",
+                     triton::createTritonPtrToMemrefPass);
+  ADD_PASS_WRAPPER_0("add_triton_to_ptr", triton::createTritonToPtrPass);
+  ADD_PASS_WRAPPER_0("add_reconcile_ptr_casts",
+                     triton::createReconcilePtrCastsPass);
+  ADD_PASS_WRAPPER_0("add_collapse_shape", triton::createCollapseShapePass);
 
   ADD_PASS_WRAPPER_0("add_llvm_debug_info", triton::createAddLLVMDebugInfoPass);
 
@@ -156,4 +172,5 @@ void init_triton_triton_shared(py::module &&m) {
 
   ADD_PASS_WRAPPER_0("add_reconcile_unrealized_casts",
                      mlir::createReconcileUnrealizedCastsPass);
+  ADD_PASS_WRAPPER_0("add_remove_dead_code", mlir::createRemoveDeadValuesPass);
 }
