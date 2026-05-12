@@ -22,6 +22,7 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/LogicalResult.h"
 #include <cassert>
+#include <cstddef>
 
 #define DEBUG_TYPE "mask-analysis"
 
@@ -792,11 +793,12 @@ LogicalResult MaskState::parseExpandDims(triton::ExpandDimsOp expandDimsOp,
   auto axis = expandDimsOp.getAxis();
   Value src = expandDimsOp.getSrc();
   auto srcType = cast<ShapedType>(src.getType());
+  size_t srcRank = srcType.getRank();
   bool isBoolOp = srcType.getElementType().isInteger(1);
   LogicalResult result = parse(src, loc, builder);
   if (failed(result)) {
     if (isBoolOp) {
-      if (srcType.getRank() > 1 && masks.size() != srcType.getRank()) {
+      if (srcRank > 1 && masks.size() != srcRank) {
         return failure();
       }
     } else {
@@ -806,7 +808,7 @@ LogicalResult MaskState::parseExpandDims(triton::ExpandDimsOp expandDimsOp,
 
   if (isBoolOp) {
     // Save mask for 1D boolean tensor
-    if (srcType.getRank() == 1) {
+    if (srcRank == 1) {
       assert(dstShape.size() == 2);
       masks.resize(dstShape.size());
       masks[axis] = nullptr;
