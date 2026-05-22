@@ -6,6 +6,7 @@ module {
     %c0_i32 = arith.constant 0 : i32
     %cst = arith.constant dense<3> : tensor<2x2xi32>
     %cst_0 = arith.constant dense<1> : tensor<2x2xi32>
+    %cst_i64 = arith.constant dense<3> : tensor<2x2xi64>
     %c2_i32 = arith.constant 2 : i32
     %0 = tt.make_range {end = 2 : i32, start = 0 : i32} : tensor<2xi32>
     %1 = tt.expand_dims %0 {axis = 1 : i32} : tensor<2xi32> -> tensor<2x1xi32>
@@ -31,7 +32,7 @@ module {
       %21:2 = scf.for %arg7 = %c0_i32 to %c2_i32 step %c1_i32 iter_args(%arg8 = %19, %arg9 = %20) -> (tensor<2x2x!tt.ptr<f32>>, tensor<2x2x!tt.ptr<f32>>)  : i32 {
         %26 = tt.load %arg8 : tensor<2x2x!tt.ptr<f32>>
         tt.store %arg9, %26 : tensor<2x2x!tt.ptr<f32>>
-        %27 = tt.addptr %arg8, %cst : tensor<2x2x!tt.ptr<f32>>, tensor<2x2xi32>
+        %27 = tt.addptr %arg8, %cst_i64 : tensor<2x2x!tt.ptr<f32>>, tensor<2x2xi64>
         %28 = tt.addptr %arg9, %cst : tensor<2x2x!tt.ptr<f32>>, tensor<2x2xi32>
         scf.yield %27, %28 : tensor<2x2x!tt.ptr<f32>>, tensor<2x2x!tt.ptr<f32>>
       }
@@ -50,6 +51,7 @@ module {
 // CHECK-DAG:       [[CST_1_:%.+]] = arith.constant 1 : i32
 // CHECK-DAG:       [[VAR_cst_:%.+]] = arith.constant dense<3> : tensor<2x2xi32>
 // CHECK-DAG:       [[VAR_cst_0_:%.+]] = arith.constant dense<1> : tensor<2x2xi32>
+// CHECK-DAG:       [[VAR_cst_1_:%.+]] = arith.constant dense<3> : tensor<2x2xi64>
 // CHECK-DAG:       [[CST_2_:%.+]] = arith.constant 2 : i32
 // CHECK-DAG:       [[VAR_0_:%.+]] = tt.make_range {end = 2 : i32, start = 0 : i32} : tensor<2xi32>
 // CHECK-NOT: separator of consecutive DAGs
@@ -74,9 +76,11 @@ module {
 // CHECK-DAG:         [[VAR_15_:%.+]]:2 = scf.for [[VAR_arg7_:%.+]] = [[CST_0_]] to [[CST_2_]] step [[CST_1_]] iter_args([[VAR_arg8_:%.+]] = [[VAR_13_]], [[VAR_arg9_:%.+]] = [[VAR_14_]]) -> (tensor<2x2xi32>, tensor<2x2xi32>)  : i32 {
 // CHECK-DAG:           [[VAR_20_:%.+]] = tts.gather [[PARAM_0_]]{{.}}[[VAR_arg8_]]{{.}} : (<f32>, tensor<2x2xi32>) -> tensor<2x2xf32>
 // CHECK:               tts.scatter [[VAR_20_]] into [[PARAM_1_]]{{.}}[[VAR_arg9_]]{{.}} : tensor<2x2xf32> into (<f32>, tensor<2x2xi32>)
-// CHECK-DAG:           [[VAR_21_:%.+]] = arith.addi [[VAR_arg8_]], [[VAR_cst_]] : tensor<2x2xi32>
-// CHECK-DAG:           [[VAR_22_:%.+]] = arith.addi [[VAR_arg9_]], [[VAR_cst_]] : tensor<2x2xi32>
-// CHECK:               scf.yield [[VAR_21_]], [[VAR_22_]] : tensor<2x2xi32>, tensor<2x2xi32>
+// CHECK-DAG:           [[VAR_21_:%.+]] = arith.extsi [[VAR_arg8_]] : tensor<2x2xi32> to tensor<2x2xi64>
+// CHECK-DAG:           [[VAR_22_:%.+]] = arith.addi [[VAR_21_]], [[VAR_cst_1_]] : tensor<2x2xi64>
+// CHECK-DAG:           [[VAR_23_:%.+]] = arith.addi [[VAR_arg9_]], [[VAR_cst_]] : tensor<2x2xi32>
+// CHECK-DAG:           [[VAR_24_:%.+]] = arith.trunci [[VAR_22_]] : tensor<2x2xi64> to tensor<2x2xi32>
+// CHECK:               scf.yield [[VAR_24_]], [[VAR_23_]] : tensor<2x2xi32>, tensor<2x2xi32>
 // CHECK:             }
 // CHECK:             [[VAR_16_:%.+]] = arith.addi [[VAR_arg5_]], [[VAR_11_]] : tensor<2x2xi32>
 // CHECK-DAG:         [[VAR_17_:%.+]] = arith.addi [[VAR_16_]], [[VAR_cst_0_]] : tensor<2x2xi32>

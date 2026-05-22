@@ -241,6 +241,60 @@ public:
     Value offset;
   };
 
+  LogicalResult processForOpMismatches() {
+    auto res = getOperation().walk([&](scf::ForOp forOp) {
+      auto yieldOp = cast<scf::YieldOp>(forOp.getBody()->getTerminator());
+      auto yieldOperands = yieldOp.getOperands();
+      auto resTypes = forOp->getResultTypes();
+
+      OpBuilder builder(yieldOp);
+      llvm::SmallVector<Value> newOperands;
+      bool hasChanges = false;
+
+      for (auto [yieldOperand, targetType] :
+           llvm::zip(yieldOperands, resTypes)) {
+        Type yieldType = yieldOperand.getType();
+        if (yieldType == targetType) {
+          newOperands.push_back(yieldOperand);
+          continue;
+        }
+
+        // Pointer loop result types are fixed by their init args, but offset
+        // arithmetic inside the loop body can widen the yielded offset tensor.
+        // Reconcile i32/i64 tensor offsets to keep the scf.for verifier happy.
+        auto yieldTensor = dyn_cast<RankedTensorType>(yieldType);
+        auto targetTensor = dyn_cast<RankedTensorType>(targetType);
+        if (!yieldTensor || !targetTensor) {
+          return WalkResult::interrupt();
+        }
+        auto yieldElem = dyn_cast<IntegerType>(yieldTensor.getElementType());
+        auto targetElem = dyn_cast<IntegerType>(targetTensor.getElementType());
+        if (!yieldElem || !targetElem) {
+          return WalkResult::interrupt();
+        }
+
+        auto yieldWidth = yieldElem.getWidth();
+        auto targetWidth = targetElem.getWidth();
+        if (yieldWidth == 64 && targetWidth == 32) {
+          newOperands.push_back(arith::TruncIOp::create(
+              builder, yieldOp.getLoc(), targetType, yieldOperand));
+        } else if (yieldWidth == 32 && targetWidth == 64) {
+          newOperands.push_back(arith::ExtSIOp::create(
+              builder, yieldOp.getLoc(), targetType, yieldOperand));
+        } else {
+          return WalkResult::interrupt();
+        }
+        hasChanges = true;
+      }
+
+      if (hasChanges) {
+        yieldOp->setOperands(newOperands);
+      }
+      return WalkResult::advance();
+    });
+    return failure(res.wasInterrupted());
+  }
+
   LogicalResult processUnstructuredPtrs(unsigned int defaultBitWidth = 32) {
     llvm::SmallDenseSet<Value> ptrArgs;
     llvm::DenseMap<Value, PtrOffset> offsetMap;
@@ -605,6 +659,10 @@ public:
       getOperation()->emitWarning(
           "Cannot transform tensor of pointers into a single base pointer "
           "with tensor of offsets");
+      return;
+    }
+    if (failed(processForOpMismatches())) {
+      getOperation()->emitWarning("Cannot reconcile offset types in for loop");
       return;
     }
 
