@@ -1748,6 +1748,97 @@ LogicalResult PtrAnalysis::rewriteStoreOp(triton::StoreOp op,
   return success();
 }
 
+LogicalResult PtrAnalysis::rewriteAtomicRMWOp(triton::AtomicRMWOp op,
+                                              bool useUnsafeMask) {
+  auto ptr = ptrMap.lookupOrNull(op.getPtr());
+  auto val = op.getVal();
+  auto mask = op.getMask();
+  auto loc = op.getLoc();
+
+  auto atomicRmwOp = op.getAtomicRmwOp();
+  auto sem = op.getSem();
+  auto scope = op.getScope();
+
+  if (!ptr) {
+    LLVM_DEBUG(op->emitRemark(
+        "PtrAnalysis: pointer is not replace with tts.make_tptr so "
+        "atomicRMWOp cannot be rewritten"));
+    return failure();
+  }
+
+  auto ptrType = dyn_cast<triton::PointerType>(ptr.getType());
+  if (ptrType && !isa<ShapedType>(ptrType.getPointeeType())) {
+    LLVM_DEBUG(op->emitRemark(
+        "PtrAnalysis: scalar atomicRMWOp will not be rewritten"));
+    return failure();
+  }
+
+  ArrayRef<OpFoldResult> dims;
+  mlir::triton::MaskState mstate(useUnsafeMask);
+
+  OpBuilder builder(op);
+
+  // Analyze the mask operand to determine at runtime the size of the data
+  // are moving.
+  if (mask) {
+    if (mstate.parse(mask, loc, builder).failed()) {
+      LLVM_DEBUG(op->emitRemark("MaskAnalysis failed"));
+      return failure();
+    }
+    dims = mstate.dims;
+  }
+
+  auto newOp = tts::AtomicRMWOp::create(builder, loc, atomicRmwOp, ptr, val,
+                                        dims, sem, scope);
+
+  LLVM_DEBUG({
+    llvm::dbgs() << "creating tts::atomic_rmw:\n";
+    newOp->dump();
+  });
+
+  op.replaceAllUsesWith(newOp.getResult());
+  op->erase();
+  return success();
+}
+
+LogicalResult PtrAnalysis::rewriteAtomicCASOp(triton::AtomicCASOp op) {
+  auto ptr = ptrMap.lookupOrNull(op.getPtr());
+  auto cmp = op.getCmp();
+  auto val = op.getVal();
+  auto loc = op.getLoc();
+
+  auto sem = op.getSem();
+  auto scope = op.getScope();
+
+  if (!ptr) {
+    LLVM_DEBUG(op->emitRemark(
+        "PtrAnalysis: pointer is not replace with tts.make_tptr so "
+        "atomicCASOp cannot be rewritten"));
+    return failure();
+  }
+
+  auto ptrType = dyn_cast<triton::PointerType>(ptr.getType());
+  if (ptrType && !isa<ShapedType>(ptrType.getPointeeType())) {
+    LLVM_DEBUG(op->emitRemark(
+        "PtrAnalysis: scalar atomicCASOp will not be rewritten"));
+    return failure();
+  }
+
+  OpBuilder builder(op);
+
+  auto newOp =
+      tts::AtomicCASOp::create(builder, loc, sem, scope, ptr, cmp, val);
+
+  LLVM_DEBUG({
+    llvm::dbgs() << "creating tts::atomic_cas:\n";
+    newOp->dump();
+  });
+
+  op.replaceAllUsesWith(newOp.getResult());
+  op->erase();
+  return success();
+}
+
 LogicalResult PtrAnalysis::rewriteOp(Operation *rootOp, bool useUnsafeMask) {
   LLVM_DEBUG({
     llvm::dbgs() << "rewriting rootOp\n";
@@ -1759,6 +1850,22 @@ LogicalResult PtrAnalysis::rewriteOp(Operation *rootOp, bool useUnsafeMask) {
       return WalkResult::advance();
     }
     return TypeSwitch<Operation *, WalkResult>(op)
+        .Case<triton::AtomicRMWOp>([&](auto atomicRmwOp) {
+          if (rewriteAtomicRMWOp(atomicRmwOp, useUnsafeMask).failed()) {
+            LLVM_DEBUG(atomicRmwOp->emitRemark(
+                "PtrAnalysis: Failed to rewrite AtomicRMWOp"));
+            return WalkResult::advance();
+          }
+          return WalkResult::skip();
+        })
+        .Case<triton::AtomicCASOp>([&](auto atomicCasOp) {
+          if (rewriteAtomicCASOp(atomicCasOp).failed()) {
+            LLVM_DEBUG(atomicCasOp->emitRemark(
+                "PtrAnalysis: Failed to rewrite AtomicCASOp"));
+            return WalkResult::advance();
+          }
+          return WalkResult::skip();
+        })
         .Case<triton::AddPtrOp>([&](auto addptr) {
           if (rewriteAddptrOp(addptr).failed()) {
             LLVM_DEBUG(
