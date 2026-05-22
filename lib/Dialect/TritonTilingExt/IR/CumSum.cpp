@@ -6,11 +6,8 @@
 //===----------------------------------------------------------------------===//
 
 //===----------------------------------------------------------------------===//
-// This file implements cumulative sum (CumSum) using the TilingInterface. Only
-// supports tensors of rank 1 & 2 and axis == rank - 1 (i.e: we can split the
-// computation of each row and compute them independently). The semantics of
-// tiling for other axes are more complex and require working with
-// non-contiguous memory.
+// This file implements cumulative sum (CumSum) using the TilingInterface for
+// tensors of rank 1 & 2.
 //===----------------------------------------------------------------------===//
 
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
@@ -65,8 +62,8 @@ mlir::LogicalResult ttx::CumSumOp::verify() {
   }
 
   int64_t axis = getAxis();
-  if (axis != rank - 1) {
-    return emitOpError("CumSum computation only supports axis == rank - 1");
+  if (axis >= rank) {
+    return emitOpError("axis must be smaller than rank");
   }
 
   return success();
@@ -88,8 +85,11 @@ AffineMap ttx::CumSumOp::getOutputIndexingMap(MLIRContext *context,
 
 SmallVector<utils::IteratorType> ttx::CumSumOp::getLoopIteratorTypes() {
   SmallVector<utils::IteratorType> iterators;
-  iterators.append(getRank() - 1, utils::IteratorType::parallel);
-  iterators.push_back(utils::IteratorType::reduction);
+  iterators.reserve(getRank());
+  for (int64_t i = 0; i < getRank(); ++i) {
+    iterators.push_back(i == getAxis() ? utils::IteratorType::reduction
+                                       : utils::IteratorType::parallel);
+  }
   return iterators;
 }
 

@@ -1,4 +1,4 @@
-// RUN: triton-shared-opt --triton-arith-to-linalg %s | FileCheck %s
+// RUN: triton-shared-opt --triton-arith-to-linalg --split-input-file %s | FileCheck %s
 
 // @triton.jit
 // def test_cumsum_op(
@@ -85,3 +85,21 @@ module {
 // CHECK:           return
 // CHECK:         }
 
+// -----
+
+module {
+  tt.func public @test_cumsum_2d_axis0(%arg0: tensor<4x8xf32>) -> tensor<4x8xf32> {
+    %0 = "tt.scan"(%arg0) <{axis = 0 : i32, reverse = false}> ({
+    ^bb0(%arg1: f32, %arg2: f32):
+      %1 = arith.addf %arg1, %arg2 : f32
+      tt.scan.return %1 : f32
+    }) : (tensor<4x8xf32>) -> tensor<4x8xf32>
+    tt.return %0 : tensor<4x8xf32>
+  }
+}
+
+// CHECK-LABEL:   func.func @test_cumsum_2d_axis0(
+// CHECK-SAME:      %[[ARG0:.*]]: tensor<4x8xf32>
+// CHECK:           %[[EMPTY:.*]] = tensor.empty() : tensor<4x8xf32>
+// CHECK:           %[[CUMSUM:.*]] = ttx.cumsum {axis = 0 : ui32, operandSegmentSizes = array<i32: 1, 1>} ins(%[[ARG0]] : tensor<4x8xf32>) outs(%[[EMPTY]] : tensor<4x8xf32>) -> tensor<4x8xf32>
+// CHECK:           return %[[CUMSUM]] : tensor<4x8xf32>

@@ -2148,11 +2148,13 @@ public:
     auto axis = op.getAxis();
     auto type = dyn_cast<RankedTensorType>(input.getType());
 
-    if (type.getRank() != 1 && type.getRank() != 2 &&
-        axis != type.getRank() - 1) {
+    if (type.getRank() != 1 && type.getRank() != 2) {
       return rewriter.notifyMatchFailure(
-          op, "Only support lowering scan op to cumsum with rank "
-              "= {1, 2} and axis = rank - 1");
+          op, "Only support lowering scan op to cumsum with rank = {1, 2}");
+    }
+
+    if (axis >= type.getRank()) {
+      return rewriter.notifyMatchFailure(op, "cumsum axis must be valid");
     }
 
     Value init = tensor::EmptyOp::create(rewriter, op.getLoc(), type.getShape(),
