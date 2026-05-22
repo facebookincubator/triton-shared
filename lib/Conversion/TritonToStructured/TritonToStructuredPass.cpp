@@ -92,7 +92,7 @@ public:
           // part of a pointer arithmetic sequence.
           auto elementType = tensorType.getElementType();
           if (isa<triton::PointerType>(elementType) ||
-              (elementType.isIntOrIndex() && !elementType.isInteger(1))) {
+              elementType.isInteger(32) || elementType.isInteger(64)) {
             return getStructuredStateTupleType(context, tensorType);
           }
           // There's a subtle difference between returning failure() and
