@@ -34,6 +34,7 @@
 #include <optional>
 #include <queue>
 #include <string>
+#include <tuple>
 
 #define DEBUG_TYPE "triton-ptr-analysis"
 
@@ -1482,43 +1483,56 @@ FailureOr<PtrState> PtrAnalysis::getBranchPtrState(scf::YieldOp yieldOp,
   return failure();
 }
 
-FailureOr<PtrState> PtrAnalysis::getIfPtrState(scf::IfOp ifOp,
-                                               size_t resIndex) {
+std::tuple<FailureOr<PtrState>, FailureOr<PtrState>, FailureOr<PtrState>>
+PtrAnalysis::getIfPtrState(scf::IfOp ifOp, size_t resIndex) {
+  assert(resIndex < ifOp.getNumResults());
+
   auto &thenRegion = ifOp.getThenRegion();
   auto thenYieldOp = dyn_cast<scf::YieldOp>(thenRegion.back().getTerminator());
   if (!thenYieldOp) {
     LLVM_DEBUG(
         ifOp->emitRemark("PtrAnalysis: Expected scf.yield in then region"));
-    return failure();
+    return {failure(), failure(), failure()};
   }
 
   auto &elseRegion = ifOp.getElseRegion();
   if (elseRegion.empty()) {
     LLVM_DEBUG(ifOp->emitRemark("PtrAnalysis: If-op should have else region"));
-    return failure();
+    return {failure(), failure(), failure()};
   }
   auto elseYieldOp = dyn_cast<scf::YieldOp>(elseRegion.back().getTerminator());
   if (!elseYieldOp) {
     LLVM_DEBUG(
         ifOp->emitRemark("PtrAnalysis: Expected scf.yield in else region"));
-    return failure();
+    return {failure(), failure(), failure()};
   }
 
   auto thenState = getBranchPtrState(thenYieldOp, resIndex);
   auto elseState = getBranchPtrState(elseYieldOp, resIndex);
-  if (failed(thenState) || failed(elseState)) {
-    LLVM_DEBUG(
-        ifOp->emitRemark("PtrAnalysis: Failed to get branch pointer states"));
-    return failure();
-  }
 
-  if (!thenState->isStructured() || !elseState->isStructured()) {
+  bool thenSucceeded = succeeded(thenState) && thenState->isStructured();
+  bool elseSucceeded = succeeded(elseState) && elseState->isStructured();
+
+  if (!thenSucceeded && !elseSucceeded) {
     LLVM_DEBUG(ifOp->emitRemark(
-        "PtrAnalysis: Both branches must have structured pointers"));
-    return failure();
+        "PtrAnalysis: result from both branches are not structured"));
+    return {failure(), failure(), failure()};
   }
 
-  return reconcileIfPtrState(ifOp, resIndex, *thenState);
+  if (thenSucceeded != elseSucceeded) {
+    LLVM_DEBUG(ifOp->emitRemark("PtrAnalysis: result from one branch is "
+                                "structured but the other is not"));
+    return {thenState, elseState, failure()};
+  }
+
+  if (thenState->hasModulo() || elseState->hasModulo()) {
+    LLVM_DEBUG(
+        ifOp->emitRemark("PtrAnalysis: do not support modulo with if op"));
+    return {thenState, elseState, failure()};
+  }
+
+  auto mergedState = reconcileIfPtrState(ifOp, resIndex, *thenState);
+  return {thenState, elseState, mergedState};
 }
 
 LogicalResult PtrAnalysis::visitOperandIfOp(scf::IfOp ifOp, Value operand,
@@ -1532,14 +1546,16 @@ LogicalResult PtrAnalysis::visitOperandIfOp(scf::IfOp ifOp, Value operand,
   }
 
   size_t resIndex = std::distance(ifOp->getResults().begin(), resultIt);
-  auto ptrState = getIfPtrState(ifOp, resIndex);
-  if (failed(ptrState)) {
+  FailureOr<PtrState> mergedState;
+  std::tie(std::ignore, std::ignore, mergedState) =
+      getIfPtrState(ifOp, resIndex);
+  if (failed(mergedState)) {
     LLVM_DEBUG(ifOp->emitRemark(
         "PtrAnalysis: Failed to get pointer state for if-op result"));
     return failure();
   }
 
-  state = *ptrState;
+  state = *mergedState;
   return success();
 }
 
@@ -1556,9 +1572,16 @@ LogicalResult PtrAnalysis::rewriteIfOp(scf::IfOp op) {
       continue;
     }
 
-    auto mergedState = getIfPtrState(op, resultIndex);
-    if (failed(mergedState)) {
+    auto [thenState, elseState, mergedState] = getIfPtrState(op, resultIndex);
+    if (failed(thenState) && failed(elseState)) {
       continue;
+    }
+
+    if (failed(mergedState)) {
+      op.walk([&](tts::GetStructuredStateOp getStateOp) {
+        structuredStateOpsToSkip.insert(getStateOp);
+      });
+      return success();
     }
 
     structuredPointers.push_back({result, *mergedState});
@@ -1656,6 +1679,12 @@ PtrAnalysis::rewriteGetStructuredStateOp(tts::GetStructuredStateOp op) {
   if (!knownPtrs.contains(tritonValue)) {
     LLVM_DEBUG(op.emitRemark(
         "Rewrite GetStructuredStateOp failed. Could not find PtrState."));
+    op.getResult(0).replaceAllUsesWith(tritonValue);
+    return failure();
+  }
+
+  if (structuredStateOpsToSkip.contains(op)) {
+    LLVM_DEBUG(op.emitRemark("Skip rewriting GetStructuredStateOp."));
     op.getResult(0).replaceAllUsesWith(tritonValue);
     return failure();
   }

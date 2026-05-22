@@ -20,6 +20,7 @@
 
 #include <cstddef>
 #include <set>
+#include <tuple>
 
 namespace mlir {
 
@@ -152,9 +153,15 @@ class PtrAnalysis {
                                           const PtrState &state);
   FailureOr<PtrState> getBranchPtrState(scf::YieldOp yieldOp, size_t index);
 
-  // Analyze both branches of the if operation and return the reconciled
-  // PtrState for the result at the given index.
-  FailureOr<PtrState> getIfPtrState(scf::IfOp ifOp, size_t resIndex);
+  // Analyze both branches of the if operation and return
+  // {thenState, elseState, mergedState} for the result at the given index.
+  std::tuple<FailureOr<PtrState>, FailureOr<PtrState>, FailureOr<PtrState>>
+  getIfPtrState(scf::IfOp ifOp, size_t resIndex);
+
+  // GetStructuredStateOps under scf.if ops that return pointers with
+  // conflicting structuredness across branches. Rewriting these would produce
+  // mismatched branch yields.
+  DenseSet<tts::GetStructuredStateOp> structuredStateOpsToSkip;
 
   DenseSet<Value> maybeStructuredArgs;
   const bool enableMakeGatherScatterTensorPtr;
