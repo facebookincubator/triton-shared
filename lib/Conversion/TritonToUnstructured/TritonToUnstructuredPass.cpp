@@ -429,6 +429,14 @@ public:
                   auto res = forOp.getResult(argIndex);
                   res.setType(offsetType);
 
+                  // Scalar pointer loop-carried values can use the offset
+                  // directly as their init arg. Tensor-of-pointer replacements
+                  // happen later when the pointer-producing ops are rewritten.
+                  if (!isa<RankedTensorType>(offsetInfo.ptrType)) {
+                    forOp.getInitArgsMutable()[argIndex].assign(
+                        offsetInfo.offset);
+                  }
+
                   // For other ops, we only need to push the result into the
                   // worklist. But for scf.for, the iter-arg corresponding to
                   // the init-arg is used in the op's body instead, we have to
@@ -454,7 +462,7 @@ public:
                 .Case<scf::YieldOp>([](scf::YieldOp op) {
                   // Bail when an scf.if returns a pointer because the pointer
                   // states from both branches may have different sources.
-                  if (op->getParentOfType<scf::IfOp>()) {
+                  if (isa<scf::IfOp>(op->getParentOp())) {
                     return failure();
                   }
                   return success();
