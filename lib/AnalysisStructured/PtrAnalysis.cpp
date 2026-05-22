@@ -1608,7 +1608,10 @@ LogicalResult PtrAnalysis::rewriteForOp(scf::ForOp op) {
     }
 
     auto state = getLoopIterArgPtrState(op, i);
-    if (failed(state)) {
+    auto loopResultState = getLoopResultPtrState(op, i);
+    assert(failed(state) == failed(loopResultState) &&
+           "Loop arg/result states should both succeed or fail together");
+    if (failed(state) || failed(loopResultState)) {
       // Because the maybeStructuredArgs may contain values that are not
       // considered structured by PtrAnalysis, failing to retrieve the PtrState
       // should not fail the rewrite process.
@@ -1624,6 +1627,7 @@ LogicalResult PtrAnalysis::rewriteForOp(scf::ForOp op) {
 
     // Save the current init arg's PtrState
     knownPtrs[arg] = state.value();
+    knownPtrs[op.getResult(i)] = loopResultState.value();
 
     // For tensors of pointers, create a tts.make_tptr at the beginning of the
     // loop body that correspond to this region iter arg. In case it is used
@@ -1655,6 +1659,16 @@ LogicalResult PtrAnalysis::rewriteForOp(scf::ForOp op) {
         OpBuilder builder(op.getRegion());
         auto maketptrOp = state->createTTSMakeTensorPtrOp(builder, op.getLoc());
         ptrMap.map(arg, maketptrOp.getResult());
+
+        // Insert a tts.make_tptr at the end of the scf.for in case we use the
+        // pointers returned by this loop.
+        {
+          OpBuilder::InsertionGuard guard(builder);
+          builder.setInsertionPointAfter(op);
+          auto loopPtr =
+              loopResultState->createTTSMakeTensorPtrOp(builder, op.getLoc());
+          ptrMap.map(op.getResult(i), loopPtr.getResult());
+        }
       }
     }
   }
