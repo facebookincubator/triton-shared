@@ -20,7 +20,8 @@ namespace triton {
 #include "triton-shared/Conversion/TritonToStructured/Passes.h.inc"
 
 std::unique_ptr<OperationPass<ModuleOp>>
-createTritonToStructuredPass(bool enableMakeGatherScatterTensorPtr = true);
+createTritonToStructuredPass(bool enableMakeGatherScatterTensorPtr = true,
+                             bool enableModuloSupport = true);
 
 } // namespace triton
 } // namespace mlir

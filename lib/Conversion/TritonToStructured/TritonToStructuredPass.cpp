@@ -317,7 +317,8 @@ public:
     }
 
     auto moduleOp = getOperation();
-    mlir::tts::PtrAnalysis ptrAnalysis(enableMakeGatherScatterTensorPtr);
+    mlir::tts::PtrAnalysis ptrAnalysis(enableMakeGatherScatterTensorPtr,
+                                       enableModuloSupport);
     ptrAnalysis.initializeMaybeStructuredArgs(moduleOp);
 
     if (failed(ptrAnalysis.rewriteOp(moduleOp, useUnsafeMask))) {
@@ -336,8 +337,10 @@ public:
 } // namespace
 
 std::unique_ptr<OperationPass<ModuleOp>>
-triton::createTritonToStructuredPass(bool enableMakeGatherScatterTensorPtr) {
+triton::createTritonToStructuredPass(bool enableMakeGatherScatterTensorPtr,
+                                     bool enableModuloSupport) {
   TritonToStructuredOptions options;
   options.enableMakeGatherScatterTensorPtr = enableMakeGatherScatterTensorPtr;
+  options.enableModuloSupport = enableModuloSupport;
   return std::make_unique<TritonToStructuredPass>(options);
 }

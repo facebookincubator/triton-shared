@@ -16,6 +16,8 @@ def TritonToStructured : Pass<"triton-to-structured", "mlir::ModuleOp"> {
   let options = [
       Option<"enableMakeGatherScatterTensorPtr", "enable-make-gather-scatter", "bool", /*default*/"true",
              "Enable make_gather_scatter_tptr support">,
+      Option<"enableModuloSupport", "enable-modulo-support", "bool", /*default*/"true",
+             "Enable modulo operation support in pointer analysis">,
       Option<"runPrepassOnly", "run-prepass-only", "bool", /*default*/"false",
              "Only run the pre-processing pass which inserts tts.get_structured_state ops used in scf.for">,
       Option<"skipPrepass", "skip-prepass", "bool", /*default*/"false",
