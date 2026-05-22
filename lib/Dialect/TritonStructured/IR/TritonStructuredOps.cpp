@@ -134,6 +134,73 @@ Value getScalarValue(Value operand, Location loc, OpBuilder &builder) {
 
 } // namespace utils
 
+template <typename T, typename = std::enable_if_t<
+                          llvm::is_one_of<T, LoadOp, StoreOp>::value>>
+static auto foldMemoryAccessOp(T op) {
+  SmallVector<OpFoldResult> mixedMaskDims(op.getMixedMaskDims());
+
+  // No constant operands were folded, just return;
+  if (failed(foldDynamicIndexList(mixedMaskDims, /*onlyNonNegative=*/true))) {
+    if constexpr (std::is_same_v<T, StoreOp>) {
+      return failure();
+    } else {
+      return OpFoldResult{};
+    }
+  }
+
+  auto [staticMaskDims, variableMaskDims] = decomposeMixedValues(mixedMaskDims);
+
+  op.setStaticMaskDims(staticMaskDims);
+  op.getMaskDimsMutable().assign(variableMaskDims);
+
+  if constexpr (std::is_same_v<T, StoreOp>) {
+    return success();
+  } else {
+    return OpFoldResult{op.getResult()};
+  }
+}
+
+template <typename T,
+          typename = std::enable_if_t<llvm::is_one_of<
+              T, MakeTensorPtrOp, MakeGatherScatterTensorPtrOp>::value>>
+static OpFoldResult foldMakeTensorPtrOp(T op) {
+  SmallVector<OpFoldResult> mixedOffsets(op.getMixedOffsets());
+  SmallVector<OpFoldResult> mixedStrides(op.getMixedStrides());
+  SmallVector<OpFoldResult> mixedShape;
+  if constexpr (std::is_same_v<T, MakeTensorPtrOp>) {
+    mixedShape = op.getMixedShape();
+  }
+
+  // No constant operands were folded, just return;
+  if (failed(foldDynamicIndexList(mixedOffsets, /*onlyNonNegative=*/true)) &&
+      failed(foldDynamicIndexList(mixedShape, /*onlyNonNegative=*/true)) &&
+      failed(foldDynamicIndexList(mixedStrides))) {
+    return OpFoldResult{};
+  }
+
+  auto [staticOffsets, variableOffsets] = decomposeMixedValues(mixedOffsets);
+  auto [staticStrides, variableStrides] = decomposeMixedValues(mixedStrides);
+  auto [staticShape, variableShape] = decomposeMixedValues(mixedShape);
+
+  op.setStaticOffsets(staticOffsets);
+  op.setStaticStrides(staticStrides);
+  if constexpr (std::is_same_v<T, MakeTensorPtrOp>) {
+    op.setStaticShape(staticShape);
+  }
+
+  op.getOffsetsMutable().assign(variableOffsets);
+  op.getStridesMutable().assign(variableStrides);
+  if constexpr (std::is_same_v<T, MakeTensorPtrOp>) {
+    op.getShapeMutable().assign(variableShape);
+  }
+
+  return op.getResult();
+}
+
+OpFoldResult MakeTensorPtrOp::fold(FoldAdaptor) {
+  return foldMakeTensorPtrOp(*this);
+}
+
 void MakeTensorPtrOp::build(OpBuilder &b, OperationState &state, Value base,
                             ArrayRef<int64_t> sizes,
                             ArrayRef<OpFoldResult> strides,
@@ -164,6 +231,10 @@ void MakeTensorPtrOp::build(OpBuilder &b, OperationState &state, Value base,
         dynamicShape, b.getDenseI64ArrayAttr(staticStrides),
         b.getDenseI64ArrayAttr(staticOffsets),
         b.getDenseI64ArrayAttr(staticShape), order);
+}
+
+OpFoldResult MakeGatherScatterTensorPtrOp::fold(FoldAdaptor) {
+  return foldMakeTensorPtrOp(*this);
 }
 
 void MakeGatherScatterTensorPtrOp::build(OpBuilder &b, OperationState &state,
@@ -331,6 +402,8 @@ LogicalResult MakeGatherScatterTensorPtrOp::verify() {
   return success();
 }
 
+OpFoldResult LoadOp::fold(FoldAdaptor) { return foldMemoryAccessOp(*this); }
+
 void LoadOp::build(OpBuilder &b, OperationState &state, Value ptr,
                    ArrayRef<OpFoldResult> dims, Value other) {
   SmallVector<int64_t> staticDims;
@@ -356,6 +429,10 @@ void LoadOp::build(OpBuilder &b, OperationState &state, Value ptr,
   }
   build(b, state, resType, ptr, dynamicDims, b.getDenseI64ArrayAttr(staticDims),
         other);
+}
+
+LogicalResult StoreOp::fold(FoldAdaptor, SmallVectorImpl<OpFoldResult> &) {
+  return foldMemoryAccessOp(*this);
 }
 
 void StoreOp::build(OpBuilder &b, OperationState &state, Value ptr, Value value,

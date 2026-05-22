@@ -15,7 +15,7 @@
 // CHECK:   }
 // CHECK:   scf.yield %{{.*}}#0, %{{.*}}#1, %{{.*}}, %{{.*}}#2 : index, index, !tt.ptr<f32>, tensor<16x16x!tt.ptr<f32>>
 // CHECK: }
-// CHECK: %{{.*}} = tts.make_tptr %[[IF_RESULT]]#2 to sizes: [16, 16], strides: [%[[IF_RESULT]]#1, %{{.*}}], offsets: [%[[IF_RESULT]]#0, %{{.*}}]
+// CHECK: %{{.*}} = tts.make_tptr %[[IF_RESULT]]#2 to sizes: [16, 16], strides: [%[[IF_RESULT]]#1, 1], offsets: [%[[IF_RESULT]]#0, 0]
 // CHECK: %[[LOAD:.*]] = "tts.load"(%{{.*}})
 // CHECK: tt.store %[[IF_RESULT]]#3, %[[LOAD]]
 

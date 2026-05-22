@@ -1,14 +1,13 @@
 // RUN: triton-shared-opt --triton-to-structured --canonicalize %s | FileCheck %s
 
 // CHECK-LABEL: tt.func public @tensor_pointer_in_conditional_kernel
-// CHECK-DAG: %[[C1:.*]] = arith.constant 1 : index
 // CHECK: %[[V0:.*]] = scf.if{{.*}}-> (index) {
 // CHECK: scf.yield{{.*}}: index
 // CHECK: } else {
 // CHECK: scf.yield{{.*}}: index
 // CHECK: }
 // CHECK-NOT: scf.if{{.*}}tensor<{{.*}}!tt.ptr
-// CHECK: tts.make_tptr %arg0 to sizes: [16], strides: [%[[C1]]], offsets: [%[[V0]]]
+// CHECK: tts.make_tptr %arg0 to sizes: [16], strides: [1], offsets: [%[[V0]]]
 
 module {
   tt.func public @tensor_pointer_in_conditional_kernel(%arg0: !tt.ptr<f16> {tt.divisibility = 16 : i32}, %arg1: !tt.ptr<f16> {tt.divisibility = 16 : i32}, %arg2: !tt.ptr<f16> {tt.divisibility = 16 : i32}, %arg3: i32) attributes {noinline = false} {

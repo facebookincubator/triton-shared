@@ -9,7 +9,7 @@
 // CHECK: %[[PTR:.*]] = arith.select{{.*}}: !tt.ptr<f32>
 // CHECK-NOT: scf.if{{.*}}tensor<{{.*}}!tt.ptr
 // CHECK: scf.for{{.*}}iter_args(%[[OFFSET:.*]] = %c0) -> (index)
-// CHECK: tts.make_tptr %[[PTR]] to sizes: [16], strides: [%c1], offsets: [%[[OFFSET]]]{{.*}}: <f32> to tensor<16x!tt.ptr<f32>>
+// CHECK: tts.make_tptr %[[PTR]] to sizes: [16], strides: [1], offsets: [%[[OFFSET]]]{{.*}}: <f32> to tensor<16x!tt.ptr<f32>>
 
 module {
   tt.func public @tensor_offset_in_conditional_kernel(%arg0: !tt.ptr<f32> {tt.divisibility = 16 : i32}, %arg1: !tt.ptr<f32> {tt.divisibility = 16 : i32}, %arg2: i32, %arg3: !tt.ptr<f32> {tt.divisibility = 16 : i32}) attributes {noinline = false} {

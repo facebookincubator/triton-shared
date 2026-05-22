@@ -1,8 +1,6 @@
 // RUN: triton-shared-opt --triton-to-structured --canonicalize %s | FileCheck %s
 
 // CHECK-LABEL: tt.func public @tensor_offset_in_conditional_kernel
-// CHECK-DAG: %c0 = arith.constant 0 : index
-// CHECK-DAG: %c1 = arith.constant 1 : index
 // CHECK-DAG: %c0_i32 = arith.constant 0 : i32
 // CHECK: %[[PTR:.*]] = scf.if %{{.*}} -> (!tt.ptr<f32>) {
 // CHECK: } else {
@@ -16,11 +14,11 @@
 // CHECK: }
 // CHECK: %[[ROW_OFFSET:.*]] = arith.addi %[[OFFSET_STRIDE]]#0, %[[COL_OFFSET]] : index
 // CHECK-NOT: scf.if{{.*}}tensor<{{.*}}!tt.ptr
-// CHECK: %{{.*}} = tts.make_tptr %[[PTR]] to sizes: [32, 16], strides: [%[[OFFSET_STRIDE]]#1, %c1], offsets: [%[[ROW_OFFSET]], %c0], shape: [0, 0], order: []
+// CHECK: %{{.*}} = tts.make_tptr %[[PTR]] to sizes: [32, 16], strides: [%[[OFFSET_STRIDE]]#1, 1], offsets: [%[[ROW_OFFSET]], 0], shape: [0, 0], order: []
 // CHECK: %[[STRIDE:.*]] = scf.if %{{.*}} -> (index) {
 // CHECK: } else {
 // CHECK: }
-// CHECK: %{{.*}} = tts.make_tptr %arg20 to sizes: [32, 16], strides: [%[[STRIDE]], %c1], offsets: [%c0, %c0], shape: [0, 0], order: []
+// CHECK: %{{.*}} = tts.make_tptr %arg20 to sizes: [32, 16], strides: [%[[STRIDE]], 1], offsets: [0, 0], shape: [0, 0], order: []
 
 module {
   tt.func public @tensor_offset_in_conditional_kernel(%arg0: !tt.ptr<f32> {tt.divisibility = 16 : i32}, %arg1: !tt.ptr<f32> {tt.divisibility = 16 : i32}, %arg2: !tt.ptr<f32> {tt.divisibility = 16 : i32}, %arg3: i32, %arg4: i32 {tt.divisibility = 16 : i32}, %arg5: i32 {tt.divisibility = 16 : i32}, %arg6: i32 {tt.divisibility = 16 : i32}, %arg7: i32, %arg8: i32, %arg9: i32 {tt.divisibility = 16 : i32}, %arg10: i32 {tt.divisibility = 16 : i32}, %arg11: i32 {tt.divisibility = 16 : i32}, %arg12: i32, %arg13: i32 {tt.divisibility = 16 : i32}, %arg14: i32 {tt.divisibility = 16 : i32}, %arg15: i32 {tt.divisibility = 16 : i32}, %arg16: i32, %arg17: i32, %arg18: i32 {tt.divisibility = 16 : i32}, %arg19: i32 {tt.divisibility = 16 : i32}, %arg20: !tt.ptr<f32> {tt.divisibility = 16 : i32}) attributes {noinline = false} {

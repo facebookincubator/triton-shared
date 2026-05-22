@@ -1,13 +1,11 @@
 // RUN: triton-shared-opt --triton-to-structured --canonicalize %s | FileCheck %s
 
 // CHECK-LABEL: tt.func public @test_multiple_ptrs_if_kernel
-// CHECK-DAG: %c1 = arith.constant 1 : index
-// CHECK-DAG: %c0 = arith.constant 0 : index
 // CHECK-DAG: %cst = arith.constant dense<2> : tensor<16x16xi32>
 // CHECK-DAG: %c0_i32 = arith.constant 0 : i32
 // CHECK: %[[PTR:.*]] = arith.select{{.*}}: !tt.ptr<f32>
 // CHECK: %[[IF_RESULT:.*]]:3 = scf.if{{.*}}-> (index, index, tensor<16x16x!tt.ptr<f32>>)
-// CHECK: tts.make_tptr %[[PTR]] to sizes: [16, 16], strides: [%[[IF_RESULT]]#1, %c1], offsets: [%[[IF_RESULT]]#0, %c0]{{.*}}: <f32> to tensor<16x16x!tt.ptr<f32>>
+// CHECK: tts.make_tptr %[[PTR]] to sizes: [16, 16], strides: [%[[IF_RESULT]]#1, 1], offsets: [%[[IF_RESULT]]#0, 0]{{.*}}: <f32> to tensor<16x16x!tt.ptr<f32>>
 // CHECK: tt.store %[[IF_RESULT]]#2
 
 module {

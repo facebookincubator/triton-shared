@@ -37,5 +37,5 @@ module {
 
 
 // CHECK: %8 = scf.for %arg4 = %c0_i32 to %6 step %c1_i32 iter_args(%arg5 = %1) -> (index)  : i32 {
-// CHECK:   %9 = tts.make_tptr %arg1 to sizes: [1], strides: [%c0], offsets: [%arg5], shape: [0], order: [] : <bf16> to tensor<1x!tt.ptr<bf16>>
+// CHECK:   %9 = tts.make_tptr %arg1 to sizes: [1], strides: [0], offsets: [%arg5], shape: [0], order: [] : <bf16> to tensor<1x!tt.ptr<bf16>>
 // CHECK:   %10 = "tts.load"(%9) <{operandSegmentSizes = array<i32: 1, 0, 0>, static_mask_dims = array<i64: 1>}> : (tensor<1x!tt.ptr<bf16>>) -> tensor<1xbf16>

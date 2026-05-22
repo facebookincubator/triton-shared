@@ -1,13 +1,11 @@
 // RUN: triton-shared-opt --triton-to-structured --canonicalize %s | FileCheck %s
 
 // CHECK-LABEL: tt.func public @test_multiple_ptrs_if_kernel
-// CHECK-DAG: %[[C1:.*]] = arith.constant 1 : index
-// CHECK-DAG: %[[C0:.*]] = arith.constant 0 : index
 // CHECK: %[[OUTER_IF:.*]]:6 = scf.if %{{.*}} -> (index, index, !tt.ptr<f32>, index, index, !tt.ptr<f32>)
 // CHECK: scf.if %{{.*}} -> (index, index, index, index)
 // CHECK-NOT: scf.if {{.*}} -> (tensor<{{.*}}x!tt.ptr
-// CHECK: tts.make_tptr %[[OUTER_IF]]#2 to sizes: [16, 16], strides: [%[[OUTER_IF]]#1, %[[C1]]], offsets: [%[[OUTER_IF]]#0, %[[C0]]]
-// CHECK: tts.make_tptr %[[OUTER_IF]]#5 to sizes: [16, 16], strides: [%[[OUTER_IF]]#4, %[[C1]]], offsets: [%[[OUTER_IF]]#3, %[[C0]]]
+// CHECK: tts.make_tptr %[[OUTER_IF]]#2 to sizes: [16, 16], strides: [%[[OUTER_IF]]#1, 1], offsets: [%[[OUTER_IF]]#0, 0]
+// CHECK: tts.make_tptr %[[OUTER_IF]]#5 to sizes: [16, 16], strides: [%[[OUTER_IF]]#4, 1], offsets: [%[[OUTER_IF]]#3, 0]
 
 module {
   tt.func public @test_multiple_ptrs_if_kernel(%arg0: !tt.ptr<f32> {tt.divisibility = 32 : i32}, %arg1: !tt.ptr<f32> {tt.divisibility = 32 : i32}, %arg2: !tt.ptr<f32> {tt.divisibility = 32 : i32}, %arg3: !tt.ptr<f32> {tt.divisibility = 32 : i32}, %arg4: !tt.ptr<f32> {tt.divisibility = 32 : i32}, %arg5: !tt.ptr<f32> {tt.divisibility = 32 : i32}, %arg6: i32 {tt.divisibility = 16 : i32}, %arg7: i32 {tt.divisibility = 32 : i32}, %arg8: i32 {tt.divisibility = 32 : i32}, %arg9: i32 {tt.divisibility = 32 : i32}, %arg10: i32 {tt.divisibility = 32 : i32}, %arg11: i32 {tt.divisibility = 32 : i32}, %arg12: i32 {tt.divisibility = 32 : i32}, %arg13: i32, %arg14: i32 {tt.divisibility = 32 : i32}, %arg15: i32 {tt.divisibility = 32 : i32}) attributes {noinline = false} {

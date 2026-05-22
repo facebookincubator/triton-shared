@@ -1,10 +1,6 @@
 // RUN: triton-shared-opt --triton-to-structured --canonicalize %s | FileCheck %s
 
 // CHECK-LABEL: tt.func public @tensor_pointer_in_conditional_kernel
-// CHECK-DAG: %c0 = arith.constant 0 : index
-// CHECK-DAG: %c10 = arith.constant 10 : index
-// CHECK-DAG: %c16 = arith.constant 16 : index
-// CHECK-DAG: %c32 = arith.constant 32 : index
 // CHECK-DAG: %c0_i32 = arith.constant 0 : i32
 // CHECK-DAG: %c2_i32 = arith.constant 2 : i32
 // CHECK: %[[RESULT:.*]]:2 = scf.if %{{.*}} -> (index, !tt.ptr<f16>) {
@@ -13,7 +9,7 @@
 // CHECK:   %{{.*}} = arith.select %{{.*}}, %arg1, %arg2 : !tt.ptr<f16>
 // CHECK: }
 // CHECK-NOT: scf.if{{.*}}tensor<{{.*}}!tt.ptr
-// CHECK: %{{.*}} = tts.make_tptr %[[RESULT]]#1 to sizes: [16, 32], strides: [%c16, %c32], offsets: [%[[RESULT]]#0, %c0], shape: [0, 0], order: []
+// CHECK: %{{.*}} = tts.make_tptr %[[RESULT]]#1 to sizes: [16, 32], strides: [16, 32], offsets: [%[[RESULT]]#0, 0], shape: [0, 0], order: []
 
 module {
   tt.func public @tensor_pointer_in_conditional_kernel(%arg0: !tt.ptr<f16> {tt.divisibility = 16 : i32}, %arg1: !tt.ptr<f16> {tt.divisibility = 16 : i32}, %arg2: !tt.ptr<f16> {tt.divisibility = 16 : i32}, %arg3: !tt.ptr<f16> {tt.divisibility = 16 : i32}, %arg4: i32) attributes {noinline = false} {

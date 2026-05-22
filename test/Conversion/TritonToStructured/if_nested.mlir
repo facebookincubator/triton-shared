@@ -1,12 +1,11 @@
 // RUN: triton-shared-opt --triton-to-structured --canonicalize %s | FileCheck %s
 
 // CHECK-LABEL: tt.func public @cf_nested
-// CHECK-DAG: %[[C1:.*]] = arith.constant 1 : index
 // CHECK: %[[CMP:.*]] = arith.cmpi eq, %arg3
 // CHECK: %[[PTR_SELECT:.*]] = arith.select %[[CMP]], %arg0, %arg1 : !tt.ptr<f32>
 // CHECK: %[[OFFSET:.*]] = scf.if %[[CMP]] -> (index)
 // CHECK-NOT: scf.if {{.*}} -> (tensor<{{.*}}x!tt.ptr
-// CHECK: tts.make_tptr %[[PTR_SELECT]] to sizes: [16], strides: [%[[C1]]], offsets: [%[[OFFSET]]]
+// CHECK: tts.make_tptr %[[PTR_SELECT]] to sizes: [16], strides: [1], offsets: [%[[OFFSET]]]
 
 module {
   tt.func public @cf_nested(%arg0: !tt.ptr<f32> {tt.divisibility = 16 : i32}, %arg1: !tt.ptr<f32> {tt.divisibility = 16 : i32}, %arg2: !tt.ptr<f32> {tt.divisibility = 16 : i32}, %arg3: i32, %arg4: i32) attributes {noinline = false} {

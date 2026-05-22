@@ -35,7 +35,7 @@
 // CHECK:     scf.yield %[[ADD1]] : index
 // CHECK:   }
 // CHECK:   %[[FINAL:.*]] = arith.addi %[[IF1]], %c1 : index
-// CHECK:   tts.make_tptr %[[SEL]] to sizes: [16], strides: [%c1], offsets: [%[[FINAL]]], {{.*}} : <f16> to tensor<16x!tt.ptr<f16>>
+// CHECK:   tts.make_tptr %[[SEL]] to sizes: [16], strides: [1], offsets: [%[[FINAL]]], {{.*}} : <f16> to tensor<16x!tt.ptr<f16>>
 // CHECK:   tts.make_tptr %arg2 to sizes: [16], strides: [1], offsets: [0], {{.*}} : <f16> to tensor<16x!tt.ptr<f16>>
 // CHECK:   scf.yield %[[FINAL]] : index
 // CHECK: } else {
@@ -46,7 +46,7 @@
 // CHECK:   scf.yield %[[IDX]] : index
 // CHECK: }
 // CHECK-NOT: scf.if{{.*}}tensor<{{.*}}!tt.ptr
-// CHECK: tts.make_tptr %[[SEL]] to sizes: [16], strides: [%c1], offsets: [%[[IF0]]], {{.*}} : <f16> to tensor<16x!tt.ptr<f16>>
+// CHECK: tts.make_tptr %[[SEL]] to sizes: [16], strides: [1], offsets: [%[[IF0]]], {{.*}} : <f16> to tensor<16x!tt.ptr<f16>>
 // CHECK: tts.make_tptr %arg2 to sizes: [16], strides: [1], offsets: [0], {{.*}} : <f16> to tensor<16x!tt.ptr<f16>>
 // CHECK: tt.return
 

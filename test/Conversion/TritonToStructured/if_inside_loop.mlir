@@ -2,17 +2,16 @@
 
 // CHECK-LABEL: tt.func public @tensor_offset_in_conditional_kernel
 // CHECK-DAG:     %[[C16:.*]] = arith.constant 16 : index
-// CHECK-DAG:     %[[C1:.*]] = arith.constant 1 : index
 // CHECK-DAG:     %[[C0:.*]] = arith.constant 0 : index
 // CHECK-DAG:     %[[C0_I32:.*]] = arith.constant 0 : i32
 // CHECK-DAG:     %[[C16_I32:.*]] = arith.constant 16 : i32
 // CHECK-DAG:     %[[C1_I32:.*]] = arith.constant 1 : i32
 // CHECK:         %{{.*}}:2 = scf.for %{{.*}} = %[[C0_I32]] to %[[C16_I32]] step %[[C1_I32]] iter_args(%[[ITER_ARG5:.*]] = %[[C0]], %[[ITER_ARG6:.*]] = %[[C0]]) -> (index, index) : i32 {
-// CHECK:           %[[STORE_PTR:.*]] = tts.make_tptr %{{.*}} to sizes: [16], strides: [%[[C1]]], offsets: [%[[ITER_ARG5]]], shape: [0], order: [] : <f32> to tensor<16x!tt.ptr<f32>>
+// CHECK:           %[[STORE_PTR:.*]] = tts.make_tptr %{{.*}} to sizes: [16], strides: [1], offsets: [%[[ITER_ARG5]]], shape: [0], order: [] : <f32> to tensor<16x!tt.ptr<f32>>
 // CHECK:           %[[CMP:.*]] = arith.cmpi ne, %{{.*}}, %[[C0_I32]] : i32
 // CHECK:           %[[SEL:.*]] = arith.select %[[CMP]], %{{.*}}, %{{.*}} : !tt.ptr<f32>
 // CHECK-NOT:       scf.if{{.*}}tensor<{{.*}}!tt.ptr
-// CHECK:           %[[LOAD_PTR:.*]] = tts.make_tptr %[[SEL]] to sizes: [16], strides: [%[[C1]]], offsets: [%[[C0]]], shape: [0], order: [] : <f32> to tensor<16x!tt.ptr<f32>>
+// CHECK:           %[[LOAD_PTR:.*]] = tts.make_tptr %[[SEL]] to sizes: [16], strides: [1], offsets: [0], shape: [0], order: [] : <f32> to tensor<16x!tt.ptr<f32>>
 // CHECK:           %[[LOAD:.*]] = "tts.load"(%[[LOAD_PTR]]) <{operandSegmentSizes = array<i32: 1, 0, 0>, static_mask_dims = array<i64>}> : (tensor<16x!tt.ptr<f32>>) -> tensor<16xf32>
 // CHECK:           "tts.store"(%[[STORE_PTR]], %[[LOAD]]) <{static_mask_dims = array<i64>}> : (tensor<16x!tt.ptr<f32>>, tensor<16xf32>) -> ()
 // CHECK:           %[[NEXT_OFFSET:.*]] = arith.addi %[[ITER_ARG6]], %[[C16]] : index

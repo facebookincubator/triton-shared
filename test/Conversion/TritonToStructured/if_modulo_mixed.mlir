@@ -70,7 +70,6 @@ module {
 }
 
 // CHECK-LABEL: tt.func @kernel
-// CHECK-DAG: %[[C16:.*]] = arith.constant 16 : index
 // CHECK-DAG: %[[CST_256:.*]] = arith.constant dense<256> : tensor<256xi32>
 // CHECK-DAG: %[[CST_16:.*]] = arith.constant dense<16> : tensor<256xi32>
 // CHECK-DAG: %[[C0:.*]] = arith.constant 0 : index
@@ -87,7 +86,7 @@ module {
 
 // CHECK-NOT: tts.make_tptr %{{.*}} to sizes: [256], strides: [%{{.*}}], offsets: [%[[IF_RESULT]]
 
-// CHECK: %[[OUTPUT_PTR:.*]] = tts.make_tptr {{.*}} to sizes: [256], strides: [%[[C16]]], offsets: [0]
+// CHECK: %[[OUTPUT_PTR:.*]] = tts.make_tptr {{.*}} to sizes: [256], strides: [16], offsets: [0]
 
 // CHECK: %[[LOOP_RESULT:.*]]:2 = scf.for {{.*}} iter_args(%[[ARG5:.*]] = %[[IF_RESULT]]#0, %[[ARG6:.*]] = %[[IF_RESULT]]#1)
 

@@ -98,7 +98,6 @@ module {
 // CHECK:           [[VAR_13_:%.+]] = bufferization.to_tensor [[RES_]] restrict writable : memref<128x256xbf16>
 // CHECK-DAG:       [[VAR_extracted_slice_:%.+]] = tensor.extract_slice [[VAR_13_]][0, 0] {{.}}[[VAR_8_]], [[VAR_9_]]{{.}} [1, 1] : tensor<128x256xbf16> to tensor<?x?xbf16>
 // CHECK-DAG:       [[VAR_subview_2_:%.+]] = memref.subview [[VAR_reinterpret_cast_0_]][0, 0] {{.}}[[VAR_8_]], [[VAR_9_]]{{.}} [1, 1] : memref<128x256xbf16, strided<[1, 1024], offset: 3074>> to memref<?x?xbf16, strided<[1, 1024], offset: 3074>>
-// CHECK:           [[CAST_0:%.+]] = memref.cast [[VAR_subview_2_]] : memref<?x?xbf16, strided<[1, 1024], offset: 3074>> to memref<?x?xbf16, strided<[1, 1024], offset: ?>>
-// CHECK:           bufferization.materialize_in_destination [[VAR_extracted_slice_]] in writable [[CAST_0]] : (tensor<?x?xbf16>, memref<?x?xbf16, strided<[1, 1024], offset: ?>>) -> ()
+// CHECK:           bufferization.materialize_in_destination [[VAR_extracted_slice_]] in writable [[VAR_subview_2_]] : (tensor<?x?xbf16>, memref<?x?xbf16, strided<[1, 1024], offset: 3074>>) -> ()
 // CHECK:           return
 // CHECK:         }

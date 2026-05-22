@@ -3,8 +3,6 @@
 // Test that scf.if returning multiple pointers both unstructured and structured are handled.
 
 // CHECK-LABEL: tt.func public @test_multiple_ptrs_if_kernel(
-// CHECK:         %[[C1:.*]] = arith.constant 1 : index
-// CHECK:         %[[C0:.*]] = arith.constant 0 : index
 // CHECK:         %[[COND:.*]] = arith.cmpi
 // CHECK:         %[[BASE_PTR:.*]] = arith.select %[[COND]]
 // CHECK:         %[[IF_RESULTS:.*]]:3 = scf.if %[[COND]] -> (index, index, tensor<16x16x!tt.ptr<f32>>) {
@@ -12,7 +10,7 @@
 // CHECK:         } else {
 // CHECK:           scf.yield %{{.*}}, %{{.*}}, %{{.*}} : index, index, tensor<16x16x!tt.ptr<f32>>
 // CHECK:         }
-// CHECK:         %[[STRUCTURED_PTR:.*]] = tts.make_tptr %[[BASE_PTR]] to sizes: [16, 16], strides: [%[[IF_RESULTS]]#1, %[[C1]]], offsets: [%[[IF_RESULTS]]#0, %[[C0]]]
+// CHECK:         %[[STRUCTURED_PTR:.*]] = tts.make_tptr %[[BASE_PTR]] to sizes: [16, 16], strides: [%[[IF_RESULTS]]#1, 1], offsets: [%[[IF_RESULTS]]#0, 0]
 // CHECK:         %[[LOADED:.*]] = "tts.load"(%[[STRUCTURED_PTR]])
 // CHECK:         tt.store %[[IF_RESULTS]]#2, %[[LOADED]]
 // CHECK:         tt.return

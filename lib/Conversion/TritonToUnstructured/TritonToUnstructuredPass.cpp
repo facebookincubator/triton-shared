@@ -158,6 +158,7 @@
 #include "triton/Dialect/Triton/IR/Dialect.h"
 
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
+#include "mlir/Dialect/Utils/StaticValueUtils.h"
 #include "mlir/Pass/PassManager.h"
 #include "triton/Dialect/Triton/IR/Types.h"
 
@@ -519,8 +520,8 @@ public:
 
                 // Add the existing offset from the base to the offset
                 // operand in the ops.
-                auto &offsetOpnd = makeTensorPtr.getOffsetsMutable()[0];
-                auto currOffset = offsetOpnd.get();
+                Value currOffset = getValueOrCreateConstantIndexOp(
+                    b, loc, makeTensorPtr.getMixedOffsets()[0]);
 
                 auto baseOffType = baseOffset.getType();
                 auto currOffType = currOffset.getType();
@@ -545,10 +546,18 @@ public:
                   }
                 }
 
-                auto accumulatedOffset = arith::AddIOp::create(
+                Value accumulatedOffset = arith::AddIOp::create(
                     b, loc, currOffset.getType(), baseOffset, currOffset);
 
-                offsetOpnd.set(accumulatedOffset);
+                SmallVector<OpFoldResult> mixedOffsets(
+                    makeTensorPtr.getMixedOffsets());
+                mixedOffsets[0] = accumulatedOffset;
+
+                auto [staticOffsets, variableOffsets] =
+                    decomposeMixedValues(mixedOffsets);
+
+                makeTensorPtr.setStaticOffsets(staticOffsets);
+                makeTensorPtr.getOffsetsMutable().assign(variableOffsets);
 
                 return success();
               })
