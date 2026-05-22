@@ -14,7 +14,9 @@
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/MLIRContext.h"
+#include "mlir/IR/Matchers.h"
 #include "mlir/IR/OperationSupport.h"
+#include "mlir/IR/PatternMatch.h"
 #include "mlir/Support/LogicalResult.h"
 
 #include "llvm/ADT/STLExtras.h"
@@ -677,6 +679,58 @@ GetStructuredStateOp::getOffsetAndStrideSegmentSizes(Type type) {
   }
 
   return std::make_pair(offsetSegmentSize, strideSegmentSize);
+}
+
+//===----------------------------------------------------------------------===//
+// Canonicalization Patterns
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+// If there are dimensions with size 1 and stride 0, replace 0 stride with
+// the product of sizes of all lower dimensions. This avoids creating
+// tts.make_tptr with zero stride for degenerate dimensions.
+class CanonicalizeZeroStrides : public OpRewritePattern<MakeTensorPtrOp> {
+public:
+  using OpRewritePattern<MakeTensorPtrOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(MakeTensorPtrOp op,
+                                PatternRewriter &rewriter) const override {
+    SmallVector<OpFoldResult> newStrides;
+    int64_t product = 1;
+    bool changed = false;
+    for (auto [size, stride] :
+         llvm::reverse(llvm::zip(op.getSizes(), op.getMixedStrides()))) {
+      auto strideIntAttr = getConstantIntValue(stride);
+      // Zero stride can be valid when the size is not 1.
+      if (size == 1 && strideIntAttr && *strideIntAttr == 0) {
+        changed = true;
+        newStrides.push_back(rewriter.getIndexAttr(product));
+      } else {
+        newStrides.push_back(stride);
+      }
+      product *= size;
+    }
+
+    if (!changed) {
+      return failure();
+    }
+
+    std::reverse(newStrides.begin(), newStrides.end());
+
+    rewriter.replaceOpWithNewOp<MakeTensorPtrOp>(
+        op, op.getBase(), op.getSizes(), newStrides, op.getMixedOffsets(),
+        op.getMixedShape(), op.getOrder());
+
+    return success();
+  }
+};
+
+} // namespace
+
+void MakeTensorPtrOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
+                                                  MLIRContext *context) {
+  patterns.add<CanonicalizeZeroStrides>(context);
 }
 
 } // namespace tts

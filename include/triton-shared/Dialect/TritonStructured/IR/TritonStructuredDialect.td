@@ -117,10 +117,10 @@ def TTS_MakeTensorPtrOp
   }];
 
   let hasFolder = 1;
+  let hasCanonicalizer = 1;
 
   // TODO
   //let hasVerifier = 1;
-  //let hasCanonicalizer = 1;
 }
 
 def TT_IndexTensorLike : AnyTypeOf<[I32Tensor, I64Tensor]>;
