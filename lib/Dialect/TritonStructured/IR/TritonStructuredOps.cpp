@@ -134,8 +134,8 @@ Value getScalarValue(Value operand, Location loc, OpBuilder &builder) {
 
 } // namespace utils
 
-template <typename T, typename = std::enable_if_t<
-                          llvm::is_one_of<T, LoadOp, StoreOp>::value>>
+template <typename T, typename = std::enable_if_t<llvm::is_one_of<
+                          T, LoadOp, StoreOp, AtomicRMWOp>::value>>
 static auto foldMemoryAccessOp(T op) {
   SmallVector<OpFoldResult> mixedMaskDims(op.getMixedMaskDims());
 
@@ -443,6 +443,145 @@ void StoreOp::build(OpBuilder &b, OperationState &state, Value ptr, Value value,
   dispatchIndexOpFoldResults(dims, dynamicDims, staticDims);
 
   build(b, state, ptr, value, dynamicDims, b.getDenseI64ArrayAttr(staticDims));
+}
+
+OpFoldResult AtomicRMWOp::fold(FoldAdaptor) {
+  return foldMemoryAccessOp(*this);
+}
+
+void AtomicRMWOp::build(OpBuilder &b, OperationState &state,
+                        triton::RMWOp atomicRmwOp, Value ptr, Value value,
+                        ArrayRef<OpFoldResult> dims, triton::MemSemantic sem,
+                        triton::MemSyncScope scope) {
+  SmallVector<int64_t> staticDims;
+  SmallVector<Value> dynamicDims;
+
+  dispatchIndexOpFoldResults(dims, dynamicDims, staticDims);
+
+  Type resType;
+  if (auto ptrTensorType = dyn_cast<RankedTensorType>(ptr.getType())) {
+    // Non-block pointer type.
+    auto ptrType = cast<triton::PointerType>(ptrTensorType.getElementType());
+    auto elemType = ptrType.getPointeeType();
+    resType = RankedTensorType::get(ptrTensorType.getShape(), elemType);
+  } else if (auto tensorPtrType =
+                 dyn_cast<triton::PointerType>(ptr.getType())) {
+    // Block pointer type.
+    auto tensorType = cast<ShapedType>(tensorPtrType.getPointeeType());
+    resType = RankedTensorType::get(tensorType.getShape(),
+                                    tensorType.getElementType());
+  }
+
+  build(b, state, resType, atomicRmwOp, ptr, value, dynamicDims,
+        b.getDenseI64ArrayAttr(staticDims), sem, scope);
+}
+
+LogicalResult AtomicRMWOp::verify() {
+  auto rmwKind = getAtomicRmwOpAttr().getValue();
+  auto ptr = getPtr();
+  auto val = getVal();
+
+  Type ptrElemType;
+  if (auto ptrTensorType = dyn_cast<RankedTensorType>(ptr.getType())) {
+    auto ptrType = cast<triton::PointerType>(ptrTensorType.getElementType());
+    ptrElemType = ptrType.getPointeeType();
+  } else if (auto tensorPtrType =
+                 dyn_cast<triton::PointerType>(ptr.getType())) {
+    auto tensorType = cast<ShapedType>(tensorPtrType.getPointeeType());
+    ptrElemType = tensorType.getElementType();
+  } else {
+    return emitOpError(
+        "ptr must be either a tensor of pointers or a pointer to tensor");
+  }
+
+  auto valTensorType = dyn_cast<RankedTensorType>(val.getType());
+  if (!valTensorType) {
+    return emitOpError("val must be a tensor");
+  }
+
+  Type valElemType = valTensorType.getElementType();
+  if (ptrElemType != valElemType) {
+    return emitOpError("ptr and val must have the same element type, got ")
+           << ptrElemType << " and " << valElemType;
+  }
+
+  // Triton MIN/MAX are signed integer operations. The frontend emits UMIN/UMAX
+  // for unsigned integer min/max and lowers floating point min/max separately.
+  if (rmwKind == mlir::triton::RMWOp::MAX ||
+      rmwKind == mlir::triton::RMWOp::MIN ||
+      rmwKind == mlir::triton::RMWOp::UMAX ||
+      rmwKind == mlir::triton::RMWOp::UMIN) {
+    if (!ptrElemType.isInteger()) {
+      return emitOpError(
+                 "MIN/MAX/UMIN/UMAX operations require integer element type, "
+                 "got ")
+             << ptrElemType;
+    }
+  }
+
+  return success();
+}
+
+void AtomicCASOp::build(OpBuilder &b, OperationState &state,
+                        triton::MemSemantic sem, triton::MemSyncScope scope,
+                        Value ptr, Value cmp, Value val) {
+  Type resType;
+  if (auto ptrTensorType = dyn_cast<RankedTensorType>(ptr.getType())) {
+    // Non-block pointer type.
+    auto ptrType = cast<triton::PointerType>(ptrTensorType.getElementType());
+    auto elemType = ptrType.getPointeeType();
+    resType = RankedTensorType::get(ptrTensorType.getShape(), elemType);
+  } else if (auto tensorPtrType =
+                 dyn_cast<triton::PointerType>(ptr.getType())) {
+    // Block pointer type.
+    auto tensorType = cast<ShapedType>(tensorPtrType.getPointeeType());
+    resType = RankedTensorType::get(tensorType.getShape(),
+                                    tensorType.getElementType());
+  }
+
+  build(b, state, resType, ptr, cmp, val, sem, scope);
+}
+
+LogicalResult AtomicCASOp::verify() {
+  auto ptr = getPtr();
+  auto cmp = getCmp();
+  auto val = getVal();
+
+  Type ptrElemType;
+  if (auto ptrTensorType = dyn_cast<RankedTensorType>(ptr.getType())) {
+    auto ptrType = cast<triton::PointerType>(ptrTensorType.getElementType());
+    ptrElemType = ptrType.getPointeeType();
+  } else if (auto tensorPtrType =
+                 dyn_cast<triton::PointerType>(ptr.getType())) {
+    auto tensorType = cast<ShapedType>(tensorPtrType.getPointeeType());
+    ptrElemType = tensorType.getElementType();
+  } else {
+    return emitOpError(
+        "ptr must be either a tensor of pointers or a pointer to tensor");
+  }
+
+  auto cmpTensorType = dyn_cast<RankedTensorType>(cmp.getType());
+  if (!cmpTensorType) {
+    return emitOpError("cmp must be a tensor");
+  }
+  Type cmpElemType = cmpTensorType.getElementType();
+
+  auto valTensorType = dyn_cast<RankedTensorType>(val.getType());
+  if (!valTensorType) {
+    return emitOpError("val must be a tensor");
+  }
+  Type valElemType = valTensorType.getElementType();
+
+  if (ptrElemType != cmpElemType) {
+    return emitOpError("ptr and cmp must have the same element type, got ")
+           << ptrElemType << " and " << cmpElemType;
+  }
+  if (ptrElemType != valElemType) {
+    return emitOpError("ptr and val must have the same element type, got ")
+           << ptrElemType << " and " << valElemType;
+  }
+
+  return success();
 }
 
 LogicalResult GetStructuredStateOp::verify() {
