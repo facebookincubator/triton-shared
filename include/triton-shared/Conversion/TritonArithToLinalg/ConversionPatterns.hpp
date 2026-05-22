@@ -2075,6 +2075,11 @@ public:
           op, "Only support cumsum variant of scan op");
     }
 
+    if (op.getReverse()) {
+      return rewriter.notifyMatchFailure(
+          op, "reverse cumsum is not supported by ttx.cumsum");
+    }
+
     auto input = op.getOperand(0);
     auto axis = op.getAxis();
     auto type = dyn_cast<RankedTensorType>(input.getType());
