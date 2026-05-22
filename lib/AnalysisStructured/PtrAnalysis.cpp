@@ -1833,6 +1833,17 @@ LogicalResult PtrAnalysis::rewriteLoadOp(triton::LoadOp op,
 
   auto loadOp = tts::LoadOp::create(builder, loc, ptr, dims, scalarOther);
 
+  if (Operation *newPtr = loadOp.getPtr().getDefiningOp()) {
+    if (Operation *oldPtr = op.getPtr().getDefiningOp()) {
+      for (StringRef attrName :
+           {"tt.contiguity", "tt.divisibility", "tt.constancy"}) {
+        if (Attribute attr = oldPtr->getAttr(attrName)) {
+          newPtr->setAttr(attrName, attr);
+        }
+      }
+    }
+  }
+
   LLVM_DEBUG({
     llvm::dbgs() << "creating tts::load:\n";
     loadOp->dump();
