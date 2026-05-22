@@ -58,6 +58,7 @@ class TritonToStructuredPass
         *tts::GetStructuredStateOp::getOffsetAndStrideTypes(context, t);
     tupleTypes.append(offsetTypes);
     tupleTypes.append(strideTypes);
+    tupleTypes.push_back(tts::utils::getSrcPtrType(t));
     return TupleType::get(context, tupleTypes);
   }
 

@@ -36,6 +36,34 @@ namespace mlir {
 namespace tts {
 
 namespace utils {
+
+Type getSrcPtrType(Type t) {
+  if (auto tensorType = dyn_cast<RankedTensorType>(t)) {
+    if (auto ptrType =
+            dyn_cast<triton::PointerType>(tensorType.getElementType())) {
+      return ptrType;
+    }
+  }
+  if (auto ptrType = dyn_cast<triton::PointerType>(t)) {
+    if (auto tensorType =
+            dyn_cast<RankedTensorType>(ptrType.getPointeeType())) {
+      return triton::PointerType::get(tensorType.getElementType(), 1);
+    }
+    return ptrType;
+  }
+  return triton::PointerType::get(NoneType::get(t.getContext()), 1);
+}
+
+bool hasPtrValue(Value v) {
+  if (!v) {
+    return false;
+  }
+  if (auto ptrType = dyn_cast<triton::PointerType>(v.getType())) {
+    return !isa<NoneType>(ptrType.getPointeeType());
+  }
+  return false;
+}
+
 // Extract a scalar value from v.
 // If v is a scalar, return that directly. Otherwise, parse through operations
 // (currently only support splat, sitofp, and truncf) that produce it to
@@ -345,16 +373,29 @@ LogicalResult GetStructuredStateOp::verify() {
       getOffsetAndStrideTypes(getContext(), getInput().getType());
 
   if (!expectedOffsetAndStrideTypes.has_value()) {
-    return failure();
+    return emitOpError("invalid input type for get_structured_state");
   }
 
   auto [expectedOffsetTypes, expectedStrideTypes] =
       *expectedOffsetAndStrideTypes;
 
-  return success(expectedOffsetTypes.size() == getOffsets().size() &&
-                 llvm::equal(expectedOffsetTypes, getOffsets().getTypes()) &&
-                 expectedStrideTypes.size() == getStrides().size() &&
-                 llvm::equal(expectedStrideTypes, getStrides().getTypes()));
+  auto offsetTypesMatched =
+      expectedOffsetTypes.size() == getOffsets().size() &&
+      llvm::equal(expectedOffsetTypes, getOffsets().getTypes());
+
+  auto strideTypesMatched =
+      expectedStrideTypes.size() == getStrides().size() &&
+      llvm::equal(expectedStrideTypes, getStrides().getTypes());
+
+  auto srcTypeMatched =
+      getSrc().getType() == utils::getSrcPtrType(getInput().getType());
+
+  if (!offsetTypesMatched || !strideTypesMatched || !srcTypeMatched) {
+    return emitOpError(
+        "verification of operation 'tts.get_structured_state' failed");
+  }
+
+  return success();
 }
 
 void GetStructuredStateOp::build(OpBuilder &b, OperationState &state,
@@ -367,7 +408,8 @@ void GetStructuredStateOp::build(OpBuilder &b, OperationState &state,
       getOffsetAndStrideTypes(b.getContext(), type)
           .value_or(std::make_pair(SmallVector<Type>{}, SmallVector<Type>{}));
 
-  build(b, state, val.getType(), offsetTypes, strideTypes, val);
+  build(b, state, val.getType(), offsetTypes, strideTypes,
+        utils::getSrcPtrType(val.getType()), val);
 }
 
 std::optional<std::pair<SmallVector<Type>, SmallVector<Type>>>

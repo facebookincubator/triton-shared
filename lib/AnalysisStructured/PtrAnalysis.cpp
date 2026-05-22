@@ -269,14 +269,16 @@ LogicalResult PtrState::addState(const PtrState &lhsState,
   assert(isEmpty() && lhsState.getRank() == rhsState.getRank());
   auto loc = op->getLoc();
 
-  if (lhsState.source && rhsState.source) {
+  const bool lhsHasSource = utils::hasPtrValue(lhsState.source);
+  const bool rhsHasSource = utils::hasPtrValue(rhsState.source);
+  if (lhsHasSource && rhsHasSource) {
     LLVM_DEBUG(op->emitRemark(
         "PtrAnalysis: do not support adding two pointer states that both "
         "have base pointers"));
     return failure();
   }
 
-  source = lhsState.source ? lhsState.source : rhsState.source;
+  source = lhsHasSource ? lhsState.source : rhsState.source;
 
   if (lhsState.scalar && rhsState.scalar) {
     auto addOp =
@@ -535,7 +537,9 @@ LogicalResult PtrState::mulState(const PtrState &lhsState,
 
   // neither lhs nor rhs should have source, since multiplying base pointer
   // does not make sense
-  if (lhsState.source && rhsState.source) {
+  const bool lhsHasSource = utils::hasPtrValue(lhsState.source);
+  const bool rhsHasSource = utils::hasPtrValue(rhsState.source);
+  if (lhsHasSource && rhsHasSource) {
     LLVM_DEBUG(op->emitRemark(
         "PtrAnalysis: do not support multiplying base pointers"));
     return failure();
@@ -1304,7 +1308,13 @@ static bool isPointerType(Type t) {
   if (auto tensor = llvm::dyn_cast<RankedTensorType>(t)) {
     return isa<triton::PointerType>(tensor.getElementType());
   }
-  return isa<triton::PointerType>(t);
+  if (auto ptr = dyn_cast<triton::PointerType>(t)) {
+    // The prepass exposes pointer sources through tts.get_structured_state. For
+    // states that cannot have a source, it materializes !tt.ptr<none>, which
+    // should not be treated as a valid pointer.
+    return !isa<NoneType>(ptr.getPointeeType());
+  }
+  return false;
 }
 
 FailureOr<PtrState> PtrAnalysis::getLoopInitArgPtrState(scf::ForOp forOp,
@@ -1549,6 +1559,20 @@ PtrAnalysis::rewriteGetStructuredStateOp(tts::GetStructuredStateOp op) {
         replacements.push_back(cast<Value>(s));
       }
     }
+  }
+
+  // Handle the source pointer exposed through the tts.get_structured_state op.
+  if (state.source) {
+    replacements.push_back(state.source);
+  } else {
+    // Materialize a dummy source for states that do not have one. The cast is
+    // removed by canonicalization when unused.
+    replacements.push_back(
+        UnrealizedConversionCastOp::create(
+            builder, op.getLoc(),
+            triton::PointerType::get(NoneType::get(op.getContext()), 1),
+            ValueRange{})
+            .getResult(0));
   }
 
   op->replaceAllUsesWith(replacements);
