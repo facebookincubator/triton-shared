@@ -2048,18 +2048,22 @@ struct MinMaxConverter : public OpRewritePattern<CmpOp> {
                            arith::CmpIPredicate pred) const {
     switch (pred) {
     case arith::CmpIPredicate::sgt:
+    case arith::CmpIPredicate::sge:
       rewriter.replaceOpWithNewOp<arith::MaxSIOp>(selectOp, cmpOp.getLhs(),
                                                   cmpOp.getRhs());
       break;
     case arith::CmpIPredicate::ugt:
+    case arith::CmpIPredicate::uge:
       rewriter.replaceOpWithNewOp<arith::MaxUIOp>(selectOp, cmpOp.getLhs(),
                                                   cmpOp.getRhs());
       break;
     case arith::CmpIPredicate::slt:
+    case arith::CmpIPredicate::sle:
       rewriter.replaceOpWithNewOp<arith::MinSIOp>(selectOp, cmpOp.getLhs(),
                                                   cmpOp.getRhs());
       break;
     case arith::CmpIPredicate::ult:
+    case arith::CmpIPredicate::ule:
       rewriter.replaceOpWithNewOp<arith::MinUIOp>(selectOp, cmpOp.getLhs(),
                                                   cmpOp.getRhs());
       break;
