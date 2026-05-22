@@ -785,11 +785,56 @@ public:
   }
 };
 
+static bool isAllTrueMask(Value mask) {
+  if (matchPattern(mask, m_One())) {
+    return true;
+  }
+
+  if (auto constantOp = mask.getDefiningOp<arith::ConstantOp>()) {
+    if (auto boolAttr = dyn_cast<BoolAttr>(constantOp.getValue())) {
+      return boolAttr.getValue();
+    }
+  }
+
+  if (auto splatOp = mask.getDefiningOp<triton::SplatOp>()) {
+    return isAllTrueMask(splatOp.getSrc());
+  }
+
+  if (auto broadcastOp = mask.getDefiningOp<triton::BroadcastOp>()) {
+    return isAllTrueMask(broadcastOp.getSrc());
+  }
+
+  return false;
+}
+
+class StripAllTrueGatherMask : public OpRewritePattern<GatherOp> {
+public:
+  using OpRewritePattern<GatherOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(GatherOp op,
+                                PatternRewriter &rewriter) const override {
+    Value mask = op.getMask();
+    if (!mask || !isAllTrueMask(mask)) {
+      return failure();
+    }
+
+    rewriter.replaceOpWithNewOp<GatherOp>(op, op.getType(), op.getPtr(),
+                                          op.getOffset(), /*mask=*/Value{},
+                                          op.getOther());
+    return success();
+  }
+};
+
 } // namespace
 
 void MakeTensorPtrOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
                                                   MLIRContext *context) {
   patterns.add<CanonicalizeZeroStrides>(context);
+}
+
+void GatherOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
+                                           MLIRContext *context) {
+  patterns.add<StripAllTrueGatherMask>(context);
 }
 
 } // namespace tts

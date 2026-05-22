@@ -280,6 +280,8 @@ def TTS_GatherOp : TTS_Op<"gather", [
     $ptr `[` $offset `]` (`mask` `=` $mask^)? (`default` `=` $other^)?
     attr-dict `:` `(` type($ptr) `,` type($offset) `)` `->` type($result)
   }];
+
+  let hasCanonicalizer = 1;
 }
 
 def TTS_ScatterOp : TTS_Op<"scatter", [
