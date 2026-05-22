@@ -318,13 +318,6 @@ public:
                   return success();
                 })
                 .Case<triton::AddPtrOp>([&](triton::AddPtrOp addptr) {
-                  // Bail when we have an addptr in an scf.if as we  do not know
-                  // if the pointer returning from both branches will have the
-                  // same source
-                  if (addptr->getParentOfType<scf::IfOp>()) {
-                    return failure();
-                  }
-
                   OpBuilder b{addptr};
                   auto loc = addptr->getLoc();
 
@@ -458,7 +451,14 @@ public:
 
                   return success();
                 })
-                .Case<scf::YieldOp>([](auto) { return success(); })
+                .Case<scf::YieldOp>([](scf::YieldOp op) {
+                  // Bail when an scf.if returns a pointer because the pointer
+                  // states from both branches may have different sources.
+                  if (op->getParentOfType<scf::IfOp>()) {
+                    return failure();
+                  }
+                  return success();
+                })
                 .Case<triton::CatOp>([](triton::CatOp op) {
                   op->emitError("Do not support gather / scatter with multiple "
                                 "bases yet");
