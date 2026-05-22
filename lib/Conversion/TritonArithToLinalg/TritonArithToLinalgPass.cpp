@@ -187,7 +187,7 @@ public:
 
     triton::populateTritonArithToLinalgConversionPatterns(
         pidsToFuncArgs, addptrToLinalg, assertToCf, transposeReduceToRank0,
-        patterns);
+        useAllocTensor, patterns);
 
     if (pidsToFuncArgs) {
       for (auto func : getOperation().getOps<triton::FuncOp>()) {

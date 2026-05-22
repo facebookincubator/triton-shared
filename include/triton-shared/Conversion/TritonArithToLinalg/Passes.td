@@ -27,6 +27,8 @@ def TritonArithToLinalg : Pass<"triton-arith-to-linalg", "mlir::ModuleOp"> {
              "Transpose reductions to rank 0 which collapses remaining dimensions. Otherwise "
              "transpose any rank - 1 reduction to rank - 2 as the old behavior. These transposes "
              "are planned for removal as Triton Shared should not be responsible for this.">,
+      Option<"useAllocTensor", "use-alloc-tensor", "bool", /*default*/"true",
+             "Use bufferization.alloc_tensor instead of tensor.empty for vector reduce accumulators">,
   ];
 }
 

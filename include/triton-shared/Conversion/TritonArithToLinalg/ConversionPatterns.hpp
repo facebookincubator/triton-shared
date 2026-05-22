@@ -1119,12 +1119,13 @@ struct MatmulConverter : public OpConversionPattern<triton::DotOp> {
 struct ReduceConverter : public OpConversionPattern<triton::ReduceOp> {
 
   ReduceConverter(MLIRContext *context, bool transposeToRank0 = true,
-                  PatternBenefit benefit = 1)
+                  bool useAllocTensor = true, PatternBenefit benefit = 1)
       : OpConversionPattern(context, benefit),
-        transposeToRank0(transposeToRank0) {}
+        transposeToRank0(transposeToRank0), useAllocTensor(useAllocTensor) {}
 
 private:
   bool transposeToRank0;
+  bool useAllocTensor;
 
   llvm::SmallVector<Operation *> getRedOps(triton::ReduceOp redOp) const {
     auto reduceBlock = redOp.getBody();
@@ -1295,8 +1296,14 @@ private:
       // directly instead of EmptyOp so that the subsequent pass can recognize
       // the patterns (EmptyOp is susceptible to being CSE'd away, making it
       // harder to match the patterns correctly).
-      initTensor = bufferization::AllocTensorOp::create(
-          rewriter, loc, RankedTensorType::get({}, constantType), ValueRange{});
+      if (useAllocTensor) {
+        initTensor = bufferization::AllocTensorOp::create(
+            rewriter, loc, RankedTensorType::get({}, constantType),
+            ValueRange{});
+      } else {
+        initTensor = tensor::EmptyOp::create(rewriter, loc, ArrayRef<int64_t>{},
+                                             constantType);
+      }
       initTensor = tensor::InsertOp::create(rewriter, loc, accBaseConstOp,
                                             initTensor, ValueRange{});
     } else {

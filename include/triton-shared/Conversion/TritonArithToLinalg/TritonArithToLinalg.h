@@ -26,6 +26,7 @@ void populateTritonArithToLinalgConversionPatterns(bool pidsToFuncArgs,
                                                    bool addptrToLinalg,
                                                    bool assertToCf,
                                                    bool transposeReduceToRank0,
+                                                   bool useAllocTensor,
                                                    RewritePatternSet &patterns);
 
 // Expand the triton pointer ops operating on pointers to linalg
