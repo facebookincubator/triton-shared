@@ -147,6 +147,15 @@ class PtrAnalysis {
       scf::ForOp forOp, size_t ptrArgIndex, const PtrState &state,
       llvm::function_ref<Value(scf::ForOp op, size_t)> getReplacementVal);
 
+  // Get the computed PtrState for the ifOp's result at the provided index.
+  FailureOr<PtrState> reconcileIfPtrState(scf::IfOp ifOp, size_t resIndex,
+                                          const PtrState &state);
+  FailureOr<PtrState> getBranchPtrState(scf::YieldOp yieldOp, size_t index);
+
+  // Analyze both branches of the if operation and return the reconciled
+  // PtrState for the result at the given index.
+  FailureOr<PtrState> getIfPtrState(scf::IfOp ifOp, size_t resIndex);
+
   DenseSet<Value> maybeStructuredArgs;
   const bool enableMakeGatherScatterTensorPtr;
   // If false, PtrAnalysis will analysis structured ptr while only identify
@@ -205,6 +214,10 @@ public:
   LogicalResult visitOperandForOp(scf::ForOp forOp, Value operand,
                                   PtrState &state, const Location loc,
                                   OpBuilder &builder);
+
+  // Operand is a result of an scf.if.
+  LogicalResult visitOperandIfOp(scf::IfOp ifOp, Value operand, PtrState &state,
+                                 const Location loc, OpBuilder &builder);
 
   // Operand is the result of arith.addi. Process both arguments and insert any
   // arith.addi instruction as needed.
@@ -353,6 +366,8 @@ public:
   // pointers over iterations. Insert any instruction needed to calculate
   // strides, offsets, and modulos.
   LogicalResult rewriteForOp(scf::ForOp op);
+
+  LogicalResult rewriteIfOp(scf::IfOp op);
 
   LogicalResult rewriteLoadOp(triton::LoadOp op, bool useUnsafeMask = false);
 

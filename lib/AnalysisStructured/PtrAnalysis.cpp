@@ -1190,6 +1190,12 @@ LogicalResult PtrAnalysis::visitOperand(Value operand, PtrState &state,
       } else if (auto intToPtrOp = dyn_cast<triton::IntToPtrOp>(op)) {
         return visitOperandIntToPtr(intToPtrOp, state, loc, builder);
       } else if (auto ifOp = dyn_cast<scf::IfOp>(op)) {
+        if (succeeded(visitOperandIfOp(ifOp, operand, state, loc, builder))) {
+          return success();
+        }
+        state.source = operand;
+        return success();
+      } else if (isa<arith::SelectOp>(op)) {
         state.source = operand;
         return success();
       } else {
@@ -1223,6 +1229,14 @@ LogicalResult PtrAnalysis::visitOperand(Value operand, PtrState &state,
     return visitOperandRem(op, state, loc, builder);
   } else if (auto op = operand.getDefiningOp<arith::ExtSIOp>()) {
     return visitOperandExtSI(op, state, loc, builder);
+  } else if (auto op = operand.getDefiningOp<scf::IfOp>()) {
+    if (succeeded(visitOperandIfOp(op, operand, state, loc, builder))) {
+      return success();
+    }
+    if (!enableMakeGatherScatterTensorPtr) {
+      return failure();
+    }
+    return state.rebuildAsUnsupportedOp(operand);
   } else if (auto op = operand.getDefiningOp<scf::ForOp>()) {
     return visitOperandForOp(op, operand, state, loc, builder);
   } else if (!operand.getDefiningOp()) {
@@ -1357,7 +1371,8 @@ FailureOr<PtrState> PtrAnalysis::getLoopInitArgPtrState(scf::ForOp forOp,
   }
 
   // If the pointer isn't defined by tts.get_structured_state nor another loop,
-  // it means the current pointer is an iterarg of the outer loop.
+  // it means the current pointer is an iterarg of the outer loop or a pointer
+  // returned by other constructs such as an scf.if.
   // In such cases, the outer loops would have already set up the PtrState for
   // us already.
   //
@@ -1367,7 +1382,6 @@ FailureOr<PtrState> PtrAnalysis::getLoopInitArgPtrState(scf::ForOp forOp,
   //    }
   // }
   if (knownPtrs.count(ptr)) {
-    assert(!ptr.getDefiningOp() && "Expect the ptr to be an iterarg");
     return knownPtrs[ptr];
   }
 
@@ -1380,7 +1394,6 @@ PtrState PtrAnalysis::reconcileLoopPtrState(
   PtrState newState = state;
   int cnt = iterArgIndex + 1;
   if (newState.getRank() == 0) {
-    assert(newState.scalar);
     // for scalar pointers, the scalar contains the offset and is the only
     // relevant newState that could be updated by the loop.
     newState.scalar = getReplacementVal(forOp, cnt);
@@ -1428,6 +1441,141 @@ FailureOr<PtrState> PtrAnalysis::getLoopResultPtrState(scf::ForOp forOp,
   return reconcileLoopPtrState(
       forOp, index, state.value(),
       [](scf::ForOp op, size_t index) { return op->getResult(index); });
+}
+
+FailureOr<PtrState> PtrAnalysis::reconcileIfPtrState(scf::IfOp ifOp,
+                                                     size_t resIndex,
+                                                     const PtrState &state) {
+  PtrState newState = state;
+  int cnt = resIndex + 1;
+  if (newState.getRank() == 0) {
+    assert(resIndex + 2 < ifOp.getNumResults() &&
+           "if op does not return enough results for scalar pointer state");
+    newState.scalar = ifOp.getResult(cnt++);
+  } else {
+    assert(resIndex + newState.getRank() * 2 + 1 < ifOp.getNumResults() &&
+           "if op does not return enough results for pointer state");
+    for (auto &offset : newState.offsets) {
+      offset = ifOp.getResult(cnt++);
+    }
+
+    for (auto &stride : newState.strides) {
+      stride = ifOp.getResult(cnt++);
+    }
+  }
+
+  newState.source = ifOp.getResult(cnt++);
+  return newState;
+}
+
+FailureOr<PtrState> PtrAnalysis::getBranchPtrState(scf::YieldOp yieldOp,
+                                                   size_t index) {
+  Value ptr = yieldOp.getOperand(index);
+  if (auto getStateOp = ptr.getDefiningOp<tts::GetStructuredStateOp>()) {
+    ptr = getStateOp->getOperand(0);
+  }
+
+  if (knownPtrs.count(ptr)) {
+    return knownPtrs[ptr];
+  }
+
+  return failure();
+}
+
+FailureOr<PtrState> PtrAnalysis::getIfPtrState(scf::IfOp ifOp,
+                                               size_t resIndex) {
+  auto &thenRegion = ifOp.getThenRegion();
+  auto thenYieldOp = dyn_cast<scf::YieldOp>(thenRegion.back().getTerminator());
+  if (!thenYieldOp) {
+    LLVM_DEBUG(
+        ifOp->emitRemark("PtrAnalysis: Expected scf.yield in then region"));
+    return failure();
+  }
+
+  auto &elseRegion = ifOp.getElseRegion();
+  if (elseRegion.empty()) {
+    LLVM_DEBUG(ifOp->emitRemark("PtrAnalysis: If-op should have else region"));
+    return failure();
+  }
+  auto elseYieldOp = dyn_cast<scf::YieldOp>(elseRegion.back().getTerminator());
+  if (!elseYieldOp) {
+    LLVM_DEBUG(
+        ifOp->emitRemark("PtrAnalysis: Expected scf.yield in else region"));
+    return failure();
+  }
+
+  auto thenState = getBranchPtrState(thenYieldOp, resIndex);
+  auto elseState = getBranchPtrState(elseYieldOp, resIndex);
+  if (failed(thenState) || failed(elseState)) {
+    LLVM_DEBUG(
+        ifOp->emitRemark("PtrAnalysis: Failed to get branch pointer states"));
+    return failure();
+  }
+
+  if (!thenState->isStructured() || !elseState->isStructured()) {
+    LLVM_DEBUG(ifOp->emitRemark(
+        "PtrAnalysis: Both branches must have structured pointers"));
+    return failure();
+  }
+
+  return reconcileIfPtrState(ifOp, resIndex, *thenState);
+}
+
+LogicalResult PtrAnalysis::visitOperandIfOp(scf::IfOp ifOp, Value operand,
+                                            PtrState &state, const Location loc,
+                                            OpBuilder &builder) {
+  auto resultIt = llvm::find(ifOp->getResults(), operand);
+  if (resultIt == ifOp->getResults().end()) {
+    LLVM_DEBUG(
+        ifOp->emitRemark("PtrAnalysis: operand is not a result of the if-op"));
+    return failure();
+  }
+
+  size_t resIndex = std::distance(ifOp->getResults().begin(), resultIt);
+  auto ptrState = getIfPtrState(ifOp, resIndex);
+  if (failed(ptrState)) {
+    LLVM_DEBUG(ifOp->emitRemark(
+        "PtrAnalysis: Failed to get pointer state for if-op result"));
+    return failure();
+  }
+
+  state = *ptrState;
+  return success();
+}
+
+LogicalResult PtrAnalysis::rewriteIfOp(scf::IfOp op) {
+  // An if op needs the states from its nested ops before deciding whether a
+  // combining tts.make_tptr op is needed, so process the contained ops first.
+  if (failed(rewriteOp(op))) {
+    LLVM_DEBUG(llvm::dbgs() << "Failed to rewrite all ops inside if-op\n");
+  }
+
+  SmallVector<std::pair<Value, PtrState>, 4> structuredPointers;
+  for (auto [resultIndex, result] : llvm::enumerate(op.getResults())) {
+    if (!maybeStructuredArgs.contains(result)) {
+      continue;
+    }
+
+    auto mergedState = getIfPtrState(op, resultIndex);
+    if (failed(mergedState)) {
+      continue;
+    }
+
+    structuredPointers.push_back({result, *mergedState});
+  }
+
+  if (!structuredPointers.empty()) {
+    OpBuilder builder(op);
+    builder.setInsertionPointAfter(op);
+    for (auto [result, state] : structuredPointers) {
+      auto makeTensorPtrOp =
+          state.createTTSMakeTensorPtrOp(builder, op.getLoc());
+      ptrMap.map(result, makeTensorPtrOp.getResult());
+      knownPtrs[result] = state;
+    }
+  }
+
+  return success();
 }
 
 LogicalResult PtrAnalysis::rewriteForOp(scf::ForOp op) {
@@ -1531,9 +1679,7 @@ PtrAnalysis::rewriteGetStructuredStateOp(tts::GetStructuredStateOp op) {
     if (state.scalar) {
       replacements.push_back(state.scalar);
     } else {
-      // This operand is a pointer directly from the kernel arguments.
-      // Use offset 0.
-      assert(!tritonValue.getDefiningOp());
+      // This operand is a source pointer with no scalar offset.
       replacements.push_back(arith::ConstantOp::create(
           builder, op.getLoc(), builder.getIndexAttr(0)));
     }
@@ -1705,6 +1851,23 @@ void PtrAnalysis::initializeMaybeStructuredArgs(Operation *op) {
             }
           }
         }
+      } else if (auto yieldOp = dyn_cast<scf::YieldOp>(user)) {
+        // Process the pointer result that scf.if returns
+        auto parentIf = dyn_cast<scf::IfOp>(yieldOp->getParentOp());
+        if (!parentIf) {
+          continue;
+        }
+        for (auto [yieldIdx, yieldOperand] :
+             llvm::enumerate(yieldOp.getOperands())) {
+          if (yieldOperand == v) {
+            auto ifResult = parentIf->getResult(yieldIdx);
+            maybeStructuredArgs.insert(ifResult);
+            if (!visited.contains(ifResult)) {
+              visited.insert(ifResult);
+              q.push(ifResult);
+            }
+          }
+        }
       } else {
         for (auto res : user->getResults()) {
           if (res.getType() != v.getType()) {
@@ -1814,6 +1977,14 @@ LogicalResult PtrAnalysis::rewriteOp(Operation *rootOp, bool useUnsafeMask) {
           if (rewriteForOp(forOp).failed()) {
             LLVM_DEBUG(
                 forOp->emitRemark("PtrAnalysis: Failed to rewrite ForOp"));
+          }
+          return WalkResult::skip();
+        })
+        .Case<scf::IfOp>([&](auto ifOp) {
+          // `rewriteIfOp` recursively visits its children, so return "skip"
+          // to avoid visiting the if-op's child operations a second time.
+          if (rewriteIfOp(ifOp).failed()) {
+            LLVM_DEBUG(ifOp->emitRemark("PtrAnalysis: Failed to rewrite IfOp"));
           }
           return WalkResult::skip();
         })
