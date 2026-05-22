@@ -390,8 +390,6 @@ OpFoldResult compareOFRs(const OpFoldResult lhs, const OpFoldResult rhs,
     case arith::CmpIPredicate::sge:
     case arith::CmpIPredicate::uge:
       return *lhsIntAttr >= *rhsIntAttr ? trueOFR : falseOFR;
-    default:
-      llvm_unreachable("Unsupported predicate");
     }
   }
 

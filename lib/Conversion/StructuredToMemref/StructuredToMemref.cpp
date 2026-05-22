@@ -64,6 +64,7 @@ static Type getElementTypeStructuredPtr(tts::MakeTensorPtrOp op) {
   return ptrType.getPointeeType();
 }
 
+[[maybe_unused]]
 static MemRefType getResultMemrefType(tts::MakeTensorPtrOp op, int64_t offset,
                                       ArrayRef<int64_t> staticStrides,
                                       ArrayRef<int64_t> resultShape) {

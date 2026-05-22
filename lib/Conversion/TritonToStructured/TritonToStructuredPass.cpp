@@ -182,7 +182,7 @@ public:
     // maps to a sequence of {pointer, offset_0, offset_1,..., stride_0,
     // stride_1,...}
     converter.addConversion(
-        [context](TupleType tupleType, SmallVectorImpl<Type> &types)
+        [](TupleType tupleType, SmallVectorImpl<Type> &types)
             -> std::optional<LogicalResult> {
           tupleType.getFlattenedTypes(types);
           return success();
