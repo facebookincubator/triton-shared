@@ -1591,9 +1591,15 @@ LogicalResult PtrAnalysis::rewriteIfOp(scf::IfOp op) {
     OpBuilder builder(op);
     builder.setInsertionPointAfter(op);
     for (auto [result, state] : structuredPointers) {
-      auto makeTensorPtrOp =
-          state.createTTSMakeTensorPtrOp(builder, op.getLoc());
-      ptrMap.map(result, makeTensorPtrOp.getResult());
+      // Only create a tts.make_tptr op if it's a block pointer
+      if (state.getRank() != 0) {
+        auto makeTensorPtrOp =
+            state.createTTSMakeTensorPtrOp(builder, op.getLoc());
+        ptrMap.map(result, makeTensorPtrOp.getResult());
+      }
+      // We always store the computed state in `knownPtrs` even
+      // for scalar pointer because this pointer may participate
+      // in a block pointer arithmetic sequence
       knownPtrs[result] = state;
     }
   }

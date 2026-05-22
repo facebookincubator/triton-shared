@@ -235,6 +235,65 @@ void MakeTensorPtrOp::build(OpBuilder &b, OperationState &state, Value base,
         b.getDenseI64ArrayAttr(staticShape), order);
 }
 
+LogicalResult MakeTensorPtrOp::verify() {
+  // Get the expected rank from the result type
+  int64_t expectedRank = 0;
+  Type resultType = getResult().getType();
+
+  if (auto tensorType = dyn_cast<RankedTensorType>(resultType)) {
+    // Tensor of pointers: tensor<!tt.ptr<type>>
+    expectedRank = tensorType.getRank();
+  } else if (auto ptrType = dyn_cast<triton::PointerType>(resultType)) {
+    // Pointer to tensor: !tt.ptr<tensor<type>>
+    if (auto tensorType =
+            dyn_cast<RankedTensorType>(ptrType.getPointeeType())) {
+      expectedRank = tensorType.getRank();
+    } else {
+      return emitOpError(
+          "result must be either a tensor of pointers or a pointer to tensor");
+    }
+  } else {
+    return emitOpError(
+        "result must be either a tensor of pointers or a pointer to tensor");
+  }
+
+  if (expectedRank == 0) {
+    return emitOpError("result rank must be greater than 0");
+  }
+
+  // sizes, strides, and offsets should have length equal to the result rank
+  if (getMixedSizes().size() != expectedRank) {
+    return emitOpError("sizes length (")
+           << getMixedSizes().size() << ") must match result rank ("
+           << expectedRank << ")";
+  }
+  if (getMixedStrides().size() != expectedRank) {
+    return emitOpError("strides length (")
+           << getMixedStrides().size() << ") must match result rank ("
+           << expectedRank << ")";
+  }
+  if (getMixedOffsets().size() != expectedRank) {
+    return emitOpError("offsets length (")
+           << getMixedOffsets().size() << ") must match result rank ("
+           << expectedRank << ")";
+  }
+  if (getMixedShape().size() != expectedRank) {
+    return emitOpError("shape length (")
+           << getMixedShape().size() << ") must match result rank ("
+           << expectedRank << ")";
+  }
+
+  // If order is non-empty, it must also match the expected rank
+  auto order = getOrder();
+  if (!order.empty() && order.size() != expectedRank) {
+    return emitOpError("order length (")
+           << order.size() << ") must match result rank (" << expectedRank
+           << ")";
+  }
+
+  return success();
+}
+
 OpFoldResult MakeGatherScatterTensorPtrOp::fold(FoldAdaptor) {
   return foldMakeTensorPtrOp(*this);
 }
