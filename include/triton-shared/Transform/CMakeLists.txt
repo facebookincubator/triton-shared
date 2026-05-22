@@ -1,1 +1,2 @@
 add_subdirectory(AddLLVMDebugInfo)
+add_subdirectory(VerifyTritonCheckpoint)
