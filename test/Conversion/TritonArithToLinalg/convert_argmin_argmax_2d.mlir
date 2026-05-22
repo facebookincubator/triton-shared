@@ -172,7 +172,11 @@ module {
 // CHECK:           %[[FILL_2:.*]] = linalg.fill ins(%[[CONSTANT_1]] : f32) outs(%[[EMPTY_6]] : tensor<4xf32>) -> tensor<4xf32>
 // CHECK:           %[[EMPTY_7:.*]] = tensor.empty() : tensor<4xi32>
 // CHECK:           %[[FILL_3:.*]] = linalg.fill ins(%[[CONSTANT_0]] : i32) outs(%[[EMPTY_7]] : tensor<4xi32>) -> tensor<4xi32>
-// CHECK:           %[[REDUCE_0:.*]]:2 = linalg.reduce ins(%[[LOAD_0]], %[[GENERIC_7]] : tensor<4x4xf32>, tensor<4x4xi32>) outs(%[[FILL_2]], %[[FILL_3]] : tensor<4xf32>, tensor<4xi32>) dimensions = [1]
+// CHECK:           %[[TRANSPOSE_EMPTY_0:.*]] = tensor.empty() : tensor<4x4xf32>
+// CHECK:           %[[TRANSPOSE_0:.*]] = linalg.transpose ins(%[[LOAD_0]] : tensor<4x4xf32>) outs(%[[TRANSPOSE_EMPTY_0]] : tensor<4x4xf32>) permutation = [1, 0]
+// CHECK:           %[[TRANSPOSE_EMPTY_1:.*]] = tensor.empty() : tensor<4x4xi32>
+// CHECK:           %[[TRANSPOSE_1:.*]] = linalg.transpose ins(%[[GENERIC_7]] : tensor<4x4xi32>) outs(%[[TRANSPOSE_EMPTY_1]] : tensor<4x4xi32>) permutation = [1, 0]
+// CHECK:           %[[REDUCE_0:.*]]:2 = linalg.reduce ins(%[[TRANSPOSE_0]], %[[TRANSPOSE_1]] : tensor<4x4xf32>, tensor<4x4xi32>) outs(%[[FILL_2]], %[[FILL_3]] : tensor<4xf32>, tensor<4xi32>) dimensions = [0]
 // CHECK:             (%[[VAL_19:.*]]: f32, %[[VAL_20:.*]]: i32, %[[VAL_21:.*]]: f32, %[[VAL_22:.*]]: i32) {
 // CHECK:               %[[CMPF_0:.*]] = arith.cmpf oeq, %[[VAL_19]], %[[VAL_21]] : f32
 // CHECK:               %[[CMPI_0:.*]] = arith.cmpi slt, %[[VAL_20]], %[[VAL_22]] : i32
@@ -261,7 +265,11 @@ module {
 // CHECK:           %[[FILL_2:.*]] = linalg.fill ins(%[[CONSTANT_1]] : f32) outs(%[[EMPTY_6]] : tensor<4xf32>) -> tensor<4xf32>
 // CHECK:           %[[EMPTY_7:.*]] = tensor.empty() : tensor<4xi32>
 // CHECK:           %[[FILL_3:.*]] = linalg.fill ins(%[[CONSTANT_0]] : i32) outs(%[[EMPTY_7]] : tensor<4xi32>) -> tensor<4xi32>
-// CHECK:           %[[REDUCE_0:.*]]:2 = linalg.reduce ins(%[[LOAD_0]], %[[GENERIC_7]] : tensor<4x4xf32>, tensor<4x4xi32>) outs(%[[FILL_2]], %[[FILL_3]] : tensor<4xf32>, tensor<4xi32>) dimensions = [1]
+// CHECK:           %[[TRANSPOSE_EMPTY_0:.*]] = tensor.empty() : tensor<4x4xf32>
+// CHECK:           %[[TRANSPOSE_0:.*]] = linalg.transpose ins(%[[LOAD_0]] : tensor<4x4xf32>) outs(%[[TRANSPOSE_EMPTY_0]] : tensor<4x4xf32>) permutation = [1, 0]
+// CHECK:           %[[TRANSPOSE_EMPTY_1:.*]] = tensor.empty() : tensor<4x4xi32>
+// CHECK:           %[[TRANSPOSE_1:.*]] = linalg.transpose ins(%[[GENERIC_7]] : tensor<4x4xi32>) outs(%[[TRANSPOSE_EMPTY_1]] : tensor<4x4xi32>) permutation = [1, 0]
+// CHECK:           %[[REDUCE_0:.*]]:2 = linalg.reduce ins(%[[TRANSPOSE_0]], %[[TRANSPOSE_1]] : tensor<4x4xf32>, tensor<4x4xi32>) outs(%[[FILL_2]], %[[FILL_3]] : tensor<4xf32>, tensor<4xi32>) dimensions = [0]
 // CHECK:             (%[[VAL_19:.*]]: f32, %[[VAL_20:.*]]: i32, %[[VAL_21:.*]]: f32, %[[VAL_22:.*]]: i32) {
 // CHECK:               %[[CMPF_0:.*]] = arith.cmpf oeq, %[[VAL_19]], %[[VAL_21]] : f32
 // CHECK:               %[[CMPI_0:.*]] = arith.cmpi slt, %[[VAL_20]], %[[VAL_22]] : i32
@@ -287,4 +295,3 @@ module {
 // CHECK:           tt.store %[[GENERIC_8]], %[[GENERIC_9]] : tensor<4x!tt.ptr<f32>>
 // CHECK:           return
 // CHECK:         }
-

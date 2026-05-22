@@ -93,8 +93,8 @@ void mlir::triton::populateTritonArithToLinalgConversionPatterns(
   // the first elements along the reduction axis and perform the reduction on
   // the remaining elements. However, this results in creatings sub-tensors that
   // aren't always multiple of 2s, which are sub-optimal for certain hardwares.
-  patterns.add<ArgMinConverter>(patterns.getContext());
-  patterns.add<ArgMaxConverter>(patterns.getContext());
+  patterns.add<ArgMinConverter>(patterns.getContext(), transposeReduceToRank0);
+  patterns.add<ArgMaxConverter>(patterns.getContext(), transposeReduceToRank0);
   patterns.add<ReduceConverter>(patterns.getContext(), transposeReduceToRank0,
                                 useAllocTensor);
 

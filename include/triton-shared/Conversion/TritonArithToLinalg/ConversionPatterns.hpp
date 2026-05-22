@@ -1500,8 +1500,13 @@ class ArgMinMaxBaseConverter : public OpConversionPattern<triton::ReduceOp> {
   }
 
 public:
-  ArgMinMaxBaseConverter(MLIRContext *context) : OpConversionPattern(context) {}
+  ArgMinMaxBaseConverter(MLIRContext *context, bool transposeToRank0 = true)
+      : OpConversionPattern(context), transposeToRank0(transposeToRank0) {}
 
+private:
+  bool transposeToRank0;
+
+public:
   LogicalResult
   matchAndRewrite(ReduceOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override final {
@@ -1593,9 +1598,37 @@ public:
         getInitTensor(rewriter, reductionResultShape, valuesAccBaseVal, loc),
         getInitTensor(rewriter, reductionResultShape, indicesAccBaseVal, loc)};
 
+    auto sourceType =
+        cast<RankedTensorType>(adaptor.getOperands().front().getType());
+    auto rank = sourceType.getRank();
+    auto isVectorReduce = (rank == 1);
+    auto axis = op.getAxis();
+    SmallVector<Value> inputs(adaptor.getOperands());
+
+    if (transposeToRank0) {
+      if (!isVectorReduce && axis != 0) {
+        SmallVector<int32_t> order;
+        order.reserve(rank);
+        order.push_back(axis);
+        for (int i = 0; i < rank; ++i) {
+          if (i != axis) {
+            order.push_back(i);
+          }
+        }
+        for (auto &input : inputs) {
+          input = getTransposedValue(input, loc, rewriter, order);
+        }
+        axis = 0;
+      }
+    } else if (axis == rank - 1 && !isVectorReduce) {
+      for (auto &input : inputs) {
+        input = getTransposedValue(input, loc, rewriter);
+      }
+      axis = rank - 2;
+    }
+
     auto linalgOp = linalg::ReduceOp::create(
-        rewriter, loc, adaptor.getOperands(), outputs,
-        SmallVector<int64_t>{adaptor.getAxis()},
+        rewriter, loc, inputs, outputs, SmallVector<int64_t>{axis},
         [&](OpBuilder &b, Location loc, ValueRange inputs) {
           assert(inputs.size() == 4);
 
@@ -1656,7 +1689,8 @@ struct ArgMaxConverter : public ArgMinMaxBaseConverter<ArgMaxConverter> {
     return -std::numeric_limits<float>::infinity();
   }
 
-  ArgMaxConverter(MLIRContext *context) : ArgMinMaxBaseConverter(context) {}
+  ArgMaxConverter(MLIRContext *context, bool transposeToRank0 = true)
+      : ArgMinMaxBaseConverter(context, transposeToRank0) {}
 };
 
 struct ArgMinConverter : public ArgMinMaxBaseConverter<ArgMinConverter> {
@@ -1687,7 +1721,8 @@ struct ArgMinConverter : public ArgMinMaxBaseConverter<ArgMinConverter> {
     return std::numeric_limits<float>::infinity();
   }
 
-  ArgMinConverter(MLIRContext *context) : ArgMinMaxBaseConverter(context) {}
+  ArgMinConverter(MLIRContext *context, bool transposeToRank0 = true)
+      : ArgMinMaxBaseConverter(context, transposeToRank0) {}
 };
 
 // get_program_id and get_num_programs:

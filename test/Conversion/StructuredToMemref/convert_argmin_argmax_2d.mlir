@@ -82,7 +82,10 @@ module {
 // CHECK:           [[VAR_7_:%.+]] = tensor.empty() : tensor<4xf32>
 // CHECK-DAG:       [[VAR_8_:%.+]] = linalg.fill ins([[CST_0_]] : f32) outs([[VAR_7_]] : tensor<4xf32>) -> tensor<4xf32>
 // CHECK-DAG:       [[VAR_9_:%.+]] = linalg.fill ins([[CST_minus_1_]] : i32) outs([[VAR_0_]] : tensor<4xi32>) -> tensor<4xi32>
-// CHECK:           [[VAR_reduced_:%.+]]:2 = linalg.reduce ins([[VAR_4_]], [[VAR_6_]] : tensor<4x4xf32>, tensor<4x4xi32>) outs([[VAR_8_]], [[VAR_9_]] : tensor<4xf32>, tensor<4xi32>) dimensions = [1]
+// CHECK:           [[VAR_transpose_empty_:%.+]] = tensor.empty() : tensor<4x4xf32>
+// CHECK:           [[VAR_transposed_:%.+]] = linalg.transpose ins([[VAR_4_]] : tensor<4x4xf32>) outs([[VAR_transpose_empty_]] : tensor<4x4xf32>) permutation = [1, 0]
+// CHECK:           [[VAR_transposed_0_:%.+]] = linalg.transpose ins([[VAR_6_]] : tensor<4x4xi32>) outs([[VAR_5_]] : tensor<4x4xi32>) permutation = [1, 0]
+// CHECK:           [[VAR_reduced_:%.+]]:2 = linalg.reduce ins([[VAR_transposed_]], [[VAR_transposed_0_]] : tensor<4x4xf32>, tensor<4x4xi32>) outs([[VAR_8_]], [[VAR_9_]] : tensor<4xf32>, tensor<4xi32>) dimensions = [0]
 // CHECK:             ([[IN_1_:%.+]]: f32, [[in_1_:%.+]]: i32, [[init_:%.+]]: f32, [[init_2_:%.+]]: i32) {
 // CHECK-DAG:           [[VAR_11_1_:%.+]] = arith.cmpf oeq, [[IN_1_]], [[init_]] : f32
 // CHECK-DAG:           [[VAR_12_1_:%.+]] = arith.cmpi slt, [[in_1_]], [[init_2_]] : i32
@@ -189,7 +192,10 @@ module {
 // CHECK:           [[VAR_7_:%.+]] = tensor.empty() : tensor<4xf32>
 // CHECK-DAG:       [[VAR_8_:%.+]] = linalg.fill ins([[CST_0_]] : f32) outs([[VAR_7_]] : tensor<4xf32>) -> tensor<4xf32>
 // CHECK-DAG:       [[VAR_9_:%.+]] = linalg.fill ins([[CST_minus_1_]] : i32) outs([[VAR_0_]] : tensor<4xi32>) -> tensor<4xi32>
-// CHECK:           [[VAR_reduced_:%.+]]:2 = linalg.reduce ins([[VAR_4_]], [[VAR_6_]] : tensor<4x4xf32>, tensor<4x4xi32>) outs([[VAR_8_]], [[VAR_9_]] : tensor<4xf32>, tensor<4xi32>) dimensions = [1]
+// CHECK:           [[VAR_transpose_empty_:%.+]] = tensor.empty() : tensor<4x4xf32>
+// CHECK:           [[VAR_transposed_:%.+]] = linalg.transpose ins([[VAR_4_]] : tensor<4x4xf32>) outs([[VAR_transpose_empty_]] : tensor<4x4xf32>) permutation = [1, 0]
+// CHECK:           [[VAR_transposed_0_:%.+]] = linalg.transpose ins([[VAR_6_]] : tensor<4x4xi32>) outs([[VAR_5_]] : tensor<4x4xi32>) permutation = [1, 0]
+// CHECK:           [[VAR_reduced_:%.+]]:2 = linalg.reduce ins([[VAR_transposed_]], [[VAR_transposed_0_]] : tensor<4x4xf32>, tensor<4x4xi32>) outs([[VAR_8_]], [[VAR_9_]] : tensor<4xf32>, tensor<4xi32>) dimensions = [0]
 // CHECK:             ([[IN_1_:%.+]]: f32, [[in_1_:%.+]]: i32, [[init_:%.+]]: f32, [[init_2_:%.+]]: i32) {
 // CHECK-DAG:           [[VAR_11_1_:%.+]] = arith.cmpf oeq, [[IN_1_]], [[init_]] : f32
 // CHECK-DAG:           [[VAR_12_1_:%.+]] = arith.cmpi slt, [[in_1_]], [[init_2_]] : i32
