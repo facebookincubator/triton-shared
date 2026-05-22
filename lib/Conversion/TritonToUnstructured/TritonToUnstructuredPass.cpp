@@ -573,6 +573,17 @@ public:
   }
 
   void runOnOperation() override {
+    {
+      PassManager pm(&getContext(), getOperation().getOperationName());
+      pm.addPass(createRemoveDeadValuesPass());
+      pm.addPass(createCanonicalizerPass());
+      pm.addPass(createCSEPass());
+      if (failed(runPipeline(pm, getOperation()))) {
+        signalPassFailure();
+        return;
+      }
+    }
+
     if (failed(processUnstructuredPtrs(offsetBitWidth))) {
       getOperation()->emitWarning(
           "Cannot transform tensor of pointers into a single base pointer "

@@ -42,7 +42,7 @@ module {
 // CHECK-DAG:       [[VAR_1_:%.+]] = builtin.unrealized_conversion_cast [[PARAM_0_]] : !tt.ptr<f32> to memref<*xf32>
 // CHECK-DAG:       [[VAR_2_:%.+]] = tt.make_range {end = 4 : i32, start = 0 : i32} : tensor<4xi32>
 // CHECK-NOT: separator of consecutive DAGs
-// CHECK-DAG:       [[VAR_3_:%.+]]:2 = scf.for [[VAR_arg2_:%.+]] = [[CST_0_]] to [[CST_2_]] step [[CST_1_]] iter_args([[VAR_arg3_:%.+]] = [[VAR_2_]], [[VAR_arg4_:%.+]] = [[VAR_2_]]) -> (tensor<4xi32>, tensor<4xi32>)  : i32 {
+// CHECK-DAG:       [[VAR_3_:%.+]] = scf.for [[VAR_arg2_:%.+]] = [[CST_0_]] to [[CST_2_]] step [[CST_1_]] iter_args([[VAR_arg3_:%.+]] = [[VAR_2_]]) -> (tensor<4xi32>)  : i32 {
 // CHECK-DAG:         [[VAR_4_:%.+]] = arith.divsi [[VAR_arg3_]], [[VAR_cst_]] : tensor<4xi32>
 // CHECK-DAG:         [[VAR_5_:%.+]] = tt.splat [[VAR_arg2_]] : i32 -> tensor<4xi32>
 // CHECK:             [[VAR_6_:%.+]] = arith.addi [[VAR_4_]], [[VAR_5_]] : tensor<4xi32>
@@ -71,9 +71,8 @@ module {
 // CHECK:               }
 // CHECK:               linalg.yield
 // CHECK:             }
-// CHECK-DAG:         [[VAR_11_:%.+]] = arith.addi [[VAR_6_]], [[VAR_cst_1_]] : tensor<4xi32>
-// CHECK-DAG:         [[VAR_12_:%.+]] = arith.addi [[VAR_arg4_]], [[VAR_cst_1_]] : tensor<4xi32>
-// CHECK:             scf.yield [[VAR_11_]], [[VAR_12_]] : tensor<4xi32>, tensor<4xi32>
+// CHECK:             [[VAR_11_:%.+]] = arith.addi [[VAR_6_]], [[VAR_cst_1_]] : tensor<4xi32>
+// CHECK:             scf.yield [[VAR_11_]] : tensor<4xi32>
 // CHECK:           }
 // CHECK:           tt.return
 // CHECK:         }

@@ -62,7 +62,7 @@ module {
 // CHECK-DAG:       [[CST_1_:%.+]] = arith.constant 1 : i32
 // CHECK-DAG:       [[VAR_0_:%.+]] = tt.make_range {end = 4 : i32, start = 0 : i32} : tensor<4xi32>
 // CHECK-NOT: separator of consecutive DAGs
-// CHECK-DAG:       [[VAR_1_:%.+]]:2 = scf.for [[VAR_arg2_:%.+]] = [[CST_0_]] to [[CST_2_]] step [[CST_1_]] iter_args([[VAR_arg3_:%.+]] = [[VAR_0_]], [[VAR_arg4_:%.+]] = [[VAR_0_]]) -> (tensor<4xi32>, tensor<4xi32>)  : i32 {
+// CHECK-DAG:       [[VAR_1_:%.+]] = scf.for [[VAR_arg2_:%.+]] = [[CST_0_]] to [[CST_2_]] step [[CST_1_]] iter_args([[VAR_arg3_:%.+]] = [[VAR_0_]]) -> (tensor<4xi32>)  : i32 {
 // CHECK-DAG:         [[VAR_2_:%.+]] = arith.divsi [[VAR_arg3_]], [[VAR_cst_1_]] : tensor<4xi32>
 // CHECK-DAG:         [[VAR_3_:%.+]] = tt.splat [[VAR_arg2_]] : i32 -> tensor<4xi32>
 // CHECK:             [[VAR_4_:%.+]] = arith.addi [[VAR_2_]], [[VAR_3_]] : tensor<4xi32>
@@ -70,30 +70,27 @@ module {
 // CHECK:             [[VAR_6_:%.+]] = tts.gather [[PARAM_0_]]{{.}}[[VAR_4_]]{{.}} mask = [[VAR_5_]] : (<f32>, tensor<4xi32>) -> tensor<4xf32>
 // CHECK:             tts.scatter [[VAR_6_]] into [[PARAM_1_]]{{.}}[[VAR_4_]]{{.}} : tensor<4xf32> into (<f32>, tensor<4xi32>)
 // CHECK-DAG:         [[VAR_7_:%.+]] = arith.addi [[VAR_4_]], [[VAR_cst_]] : tensor<4xi32>
-// CHECK-DAG:         [[VAR_8_:%.+]] = arith.addi [[VAR_arg4_]], [[VAR_cst_]] : tensor<4xi32>
-// CHECK-DAG:         [[VAR_9_:%.+]] = arith.addi [[VAR_arg2_]], [[CST_1_]] : i32
+// CHECK-DAG:         [[VAR_8_:%.+]] = arith.addi [[VAR_arg2_]], [[CST_1_]] : i32
 // CHECK-NOT: separator of consecutive DAGs
-// CHECK-DAG:         [[VAR_10_:%.+]]:2 = scf.for [[VAR_arg5_:%.+]] = [[CST_0_]] to [[CST_2_]] step [[CST_1_]] iter_args([[VAR_arg6_:%.+]] = [[VAR_7_]], [[VAR_arg7_:%.+]] = [[VAR_8_]]) -> (tensor<4xi32>, tensor<4xi32>)  : i32 {
-// CHECK-DAG:           [[VAR_17_:%.+]] = arith.addi [[VAR_arg5_]], [[CST_1_]] : i32
-// CHECK:               [[VAR_18_:%.+]] = arith.muli [[VAR_9_]], [[VAR_17_]] : i32
-// CHECK:               [[VAR_19_:%.+]] = tt.splat [[VAR_18_]] : i32 -> tensor<4xi32>
-// CHECK:               [[VAR_20_:%.+]] = arith.divsi [[VAR_arg6_]], [[VAR_19_]] : tensor<4xi32>
-// CHECK:               [[VAR_21_:%.+]] = arith.addi [[VAR_20_]], [[VAR_3_]] : tensor<4xi32>
-// CHECK:               [[VAR_22_:%.+]] = arith.cmpi slt, [[VAR_21_]], [[VAR_cst_0_]] : tensor<4xi32>
-// CHECK:               [[VAR_23_:%.+]] = tts.gather [[PARAM_0_]]{{.}}[[VAR_21_]]{{.}} mask = [[VAR_22_]] : (<f32>, tensor<4xi32>) -> tensor<4xf32>
-// CHECK:               tts.scatter [[VAR_23_]] into [[PARAM_1_]]{{.}}[[VAR_21_]]{{.}} : tensor<4xf32> into (<f32>, tensor<4xi32>)
-// CHECK-DAG:           [[VAR_24_:%.+]] = arith.addi [[VAR_21_]], [[VAR_cst_]] : tensor<4xi32>
-// CHECK-DAG:           [[VAR_25_:%.+]] = arith.addi [[VAR_arg7_]], [[VAR_cst_]] : tensor<4xi32>
-// CHECK:               scf.yield [[VAR_24_]], [[VAR_25_]] : tensor<4xi32>, tensor<4xi32>
+// CHECK-DAG:         [[VAR_9_:%.+]] = scf.for [[VAR_arg4_:%.+]] = [[CST_0_]] to [[CST_2_]] step [[CST_1_]] iter_args([[VAR_arg5_:%.+]] = [[VAR_7_]]) -> (tensor<4xi32>)  : i32 {
+// CHECK-DAG:           [[VAR_15_:%.+]] = arith.addi [[VAR_arg4_]], [[CST_1_]] : i32
+// CHECK:               [[VAR_16_:%.+]] = arith.muli [[VAR_8_]], [[VAR_15_]] : i32
+// CHECK:               [[VAR_17_:%.+]] = tt.splat [[VAR_16_]] : i32 -> tensor<4xi32>
+// CHECK:               [[VAR_18_:%.+]] = arith.divsi [[VAR_arg5_]], [[VAR_17_]] : tensor<4xi32>
+// CHECK:               [[VAR_19_:%.+]] = arith.addi [[VAR_18_]], [[VAR_3_]] : tensor<4xi32>
+// CHECK:               [[VAR_20_:%.+]] = arith.cmpi slt, [[VAR_19_]], [[VAR_cst_0_]] : tensor<4xi32>
+// CHECK:               [[VAR_21_:%.+]] = tts.gather [[PARAM_0_]]{{.}}[[VAR_19_]]{{.}} mask = [[VAR_20_]] : (<f32>, tensor<4xi32>) -> tensor<4xf32>
+// CHECK:               tts.scatter [[VAR_21_]] into [[PARAM_1_]]{{.}}[[VAR_19_]]{{.}} : tensor<4xf32> into (<f32>, tensor<4xi32>)
+// CHECK:               [[VAR_22_:%.+]] = arith.addi [[VAR_19_]], [[VAR_cst_]] : tensor<4xi32>
+// CHECK:               scf.yield [[VAR_22_]] : tensor<4xi32>
 // CHECK:             }
-// CHECK:             [[VAR_11_:%.+]] = arith.divsi [[VAR_10_]]#0, [[VAR_cst_1_]] : tensor<4xi32>
-// CHECK:             [[VAR_12_:%.+]] = arith.addi [[VAR_11_]], [[VAR_3_]] : tensor<4xi32>
-// CHECK:             [[VAR_13_:%.+]] = arith.cmpi slt, [[VAR_12_]], [[VAR_cst_0_]] : tensor<4xi32>
-// CHECK:             [[VAR_14_:%.+]] = tts.gather [[PARAM_0_]]{{.}}[[VAR_12_]]{{.}} mask = [[VAR_13_]] : (<f32>, tensor<4xi32>) -> tensor<4xf32>
-// CHECK:             tts.scatter [[VAR_14_]] into [[PARAM_1_]]{{.}}[[VAR_12_]]{{.}} : tensor<4xf32> into (<f32>, tensor<4xi32>)
-// CHECK-DAG:         [[VAR_15_:%.+]] = arith.addi [[VAR_12_]], [[VAR_cst_]] : tensor<4xi32>
-// CHECK-DAG:         [[VAR_16_:%.+]] = arith.addi [[VAR_10_]]#1, [[VAR_cst_]] : tensor<4xi32>
-// CHECK:             scf.yield [[VAR_15_]], [[VAR_16_]] : tensor<4xi32>, tensor<4xi32>
+// CHECK:             [[VAR_10_:%.+]] = arith.divsi [[VAR_9_]], [[VAR_cst_1_]] : tensor<4xi32>
+// CHECK:             [[VAR_11_:%.+]] = arith.addi [[VAR_10_]], [[VAR_3_]] : tensor<4xi32>
+// CHECK:             [[VAR_12_:%.+]] = arith.cmpi slt, [[VAR_11_]], [[VAR_cst_0_]] : tensor<4xi32>
+// CHECK:             [[VAR_13_:%.+]] = tts.gather [[PARAM_0_]]{{.}}[[VAR_11_]]{{.}} mask = [[VAR_12_]] : (<f32>, tensor<4xi32>) -> tensor<4xf32>
+// CHECK:             tts.scatter [[VAR_13_]] into [[PARAM_1_]]{{.}}[[VAR_11_]]{{.}} : tensor<4xf32> into (<f32>, tensor<4xi32>)
+// CHECK:             [[VAR_14_:%.+]] = arith.addi [[VAR_11_]], [[VAR_cst_]] : tensor<4xi32>
+// CHECK:             scf.yield [[VAR_14_]] : tensor<4xi32>
 // CHECK:           }
 // CHECK:           tt.return
 // CHECK:         }
