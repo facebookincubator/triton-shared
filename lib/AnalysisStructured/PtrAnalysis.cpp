@@ -34,6 +34,7 @@
 #include <optional>
 #include <queue>
 #include <string>
+#include <tuple>
 
 #define DEBUG_TYPE "triton-ptr-analysis"
 
@@ -209,9 +210,12 @@ LogicalResult PtrState::rebuildAsUnsupportedOp(Value operand) {
   if (!isEmpty())
     return failure();
 
-  // Scalar has been take care early.
-  // Assume here must be shape type.
-  auto opType = cast<ShapedType>(operand.getType());
+  // Scalar values have been handled earlier; unsupported fallback only applies
+  // to shaped values.
+  auto opType = dyn_cast<ShapedType>(operand.getType());
+  if (!opType) {
+    return failure();
+  }
   // Skip support for pointer types which could be source of PtrState.
   // This check avoids creating a PtrState with non-structured source.
   if (isa<triton::PointerType>(opType.getElementType()))
@@ -269,14 +273,16 @@ LogicalResult PtrState::addState(const PtrState &lhsState,
   assert(isEmpty() && lhsState.getRank() == rhsState.getRank());
   auto loc = op->getLoc();
 
-  if (lhsState.source && rhsState.source) {
+  bool lhsHasSource = utils::hasPtrValue(lhsState.source);
+  bool rhsHasSource = utils::hasPtrValue(rhsState.source);
+  if (lhsHasSource && rhsHasSource) {
     LLVM_DEBUG(op->emitRemark(
         "PtrAnalysis: do not support adding two pointer states that both "
         "have base pointers"));
     return failure();
   }
 
-  source = lhsState.source ? lhsState.source : rhsState.source;
+  source = lhsHasSource ? lhsState.source : rhsState.source;
 
   if (lhsState.scalar && rhsState.scalar) {
     auto addOp =
@@ -535,7 +541,9 @@ LogicalResult PtrState::mulState(const PtrState &lhsState,
 
   // neither lhs nor rhs should have source, since multiplying base pointer
   // does not make sense
-  if (lhsState.source && rhsState.source) {
+  bool lhsHasSource = utils::hasPtrValue(lhsState.source);
+  bool rhsHasSource = utils::hasPtrValue(rhsState.source);
+  if (lhsHasSource && rhsHasSource) {
     LLVM_DEBUG(op->emitRemark(
         "PtrAnalysis: do not support multiplying base pointers"));
     return failure();
@@ -1186,6 +1194,8 @@ LogicalResult PtrAnalysis::visitOperand(Value operand, PtrState &state,
       } else if (auto intToPtrOp = dyn_cast<triton::IntToPtrOp>(op)) {
         return visitOperandIntToPtr(intToPtrOp, state, loc, builder);
       } else if (auto ifOp = dyn_cast<scf::IfOp>(op)) {
+        return visitOperandIfOp(ifOp, operand, state, loc, builder);
+      } else if (isa<arith::SelectOp>(op)) {
         state.source = operand;
         return success();
       } else {
@@ -1221,6 +1231,8 @@ LogicalResult PtrAnalysis::visitOperand(Value operand, PtrState &state,
     return visitOperandExtSI(op, state, loc, builder);
   } else if (auto op = operand.getDefiningOp<scf::ForOp>()) {
     return visitOperandForOp(op, operand, state, loc, builder);
+  } else if (auto op = operand.getDefiningOp<scf::IfOp>()) {
+    return visitOperandIfOp(op, operand, state, loc, builder);
   } else if (!operand.getDefiningOp()) {
     if (!knownPtrs.contains(operand)) {
       return failure();
@@ -1304,7 +1316,10 @@ static bool isPointerType(Type t) {
   if (auto tensor = llvm::dyn_cast<RankedTensorType>(t)) {
     return isa<triton::PointerType>(tensor.getElementType());
   }
-  return isa<triton::PointerType>(t);
+  if (auto ptr = dyn_cast<triton::PointerType>(t)) {
+    return !isa<NoneType>(ptr.getPointeeType());
+  }
+  return false;
 }
 
 FailureOr<PtrState> PtrAnalysis::getLoopInitArgPtrState(scf::ForOp forOp,
@@ -1347,7 +1362,8 @@ FailureOr<PtrState> PtrAnalysis::getLoopInitArgPtrState(scf::ForOp forOp,
   }
 
   // If the pointer isn't defined by tts.get_structured_state nor another loop,
-  // it means the current pointer is an iterarg of the outer loop.
+  // it means the current pointer is an iterarg of the outer loop or a pointer
+  // returned by another construct such as an scf.if.
   // In such cases, the outer loops would have already set up the PtrState for
   // us already.
   //
@@ -1357,7 +1373,6 @@ FailureOr<PtrState> PtrAnalysis::getLoopInitArgPtrState(scf::ForOp forOp,
   //    }
   // }
   if (knownPtrs.count(ptr)) {
-    assert(!ptr.getDefiningOp() && "Expect the ptr to be an iterarg");
     return knownPtrs[ptr];
   }
 
@@ -1370,7 +1385,6 @@ PtrState PtrAnalysis::reconcileLoopPtrState(
   PtrState newState = state;
   int cnt = iterArgIndex + 1;
   if (newState.getRank() == 0) {
-    assert(newState.scalar);
     // for scalar pointers, the scalar contains the offset and is the only
     // relevant newState that could be updated by the loop.
     newState.scalar = getReplacementVal(forOp, cnt);
@@ -1420,6 +1434,145 @@ FailureOr<PtrState> PtrAnalysis::getLoopResultPtrState(scf::ForOp forOp,
       [](scf::ForOp op, size_t index) { return op->getResult(index); });
 }
 
+FailureOr<PtrState> PtrAnalysis::reconcileIfPtrState(scf::IfOp ifOp,
+                                                     size_t resIndex,
+                                                     const PtrState &state) {
+  PtrState newState = state;
+  size_t cnt = resIndex + 1;
+  if (newState.getRank() == 0) {
+    assert(resIndex + 2 < ifOp.getNumResults() &&
+           "if op does not return enough pointer state results");
+    newState.scalar = ifOp.getResult(cnt++);
+  } else {
+    assert(resIndex + newState.getRank() * 2 + 1 < ifOp.getNumResults() &&
+           "if op does not return enough pointer state results");
+    for (auto &offset : newState.offsets) {
+      offset = ifOp.getResult(cnt++);
+    }
+    for (auto &stride : newState.strides) {
+      stride = ifOp.getResult(cnt++);
+    }
+  }
+
+  newState.source = ifOp.getResult(cnt++);
+  return newState;
+}
+
+FailureOr<PtrState> PtrAnalysis::getBranchPtrState(scf::YieldOp yieldOp,
+                                                   size_t index) {
+  Value ptr = yieldOp.getOperand(index);
+  if (auto getStateOp = ptr.getDefiningOp<tts::GetStructuredStateOp>()) {
+    ptr = getStateOp->getOperand(0);
+  }
+  if (knownPtrs.count(ptr)) {
+    return knownPtrs[ptr];
+  }
+  return failure();
+}
+
+std::tuple<FailureOr<PtrState>, FailureOr<PtrState>, FailureOr<PtrState>>
+PtrAnalysis::getIfPtrState(scf::IfOp ifOp, size_t resIndex) {
+  assert(resIndex < ifOp.getNumResults());
+
+  FailureOr<PtrState> thenState = getBranchPtrState(ifOp.thenYield(), resIndex);
+  FailureOr<PtrState> elseState = getBranchPtrState(ifOp.elseYield(), resIndex);
+
+  bool thenSucceeded = succeeded(thenState) && thenState->isStructured();
+  bool elseSucceeded = succeeded(elseState) && elseState->isStructured();
+
+  if (!thenSucceeded && !elseSucceeded) {
+    LLVM_DEBUG(ifOp->emitRemark(
+        "PtrAnalysis: result from both branches is not structured"));
+    return {failure(), failure(), failure()};
+  }
+
+  if (thenSucceeded != elseSucceeded) {
+    LLVM_DEBUG(ifOp->emitRemark("PtrAnalysis: result from one branch is "
+                                "structured but the other is not"));
+    return {thenState, elseState, failure()};
+  }
+
+  if (thenState->hasModulo() || elseState->hasModulo()) {
+    LLVM_DEBUG(
+        ifOp->emitRemark("PtrAnalysis: do not support modulo with if op"));
+    return {thenState, elseState, failure()};
+  }
+
+  FailureOr<PtrState> mergedState =
+      reconcileIfPtrState(ifOp, resIndex, *thenState);
+  return {thenState, elseState, mergedState};
+}
+
+LogicalResult PtrAnalysis::visitOperandIfOp(scf::IfOp ifOp, Value operand,
+                                            PtrState &state, const Location loc,
+                                            OpBuilder &builder) {
+  auto resultIt = llvm::find(ifOp->getResults(), operand);
+  if (resultIt == ifOp->getResults().end()) {
+    LLVM_DEBUG(
+        ifOp->emitRemark("PtrAnalysis: operand is not a result of the if op"));
+    return failure();
+  }
+
+  size_t resIndex = std::distance(ifOp->getResults().begin(), resultIt);
+  FailureOr<PtrState> mergedState;
+  std::tie(std::ignore, std::ignore, mergedState) =
+      getIfPtrState(ifOp, resIndex);
+  if (failed(mergedState)) {
+    if (enableMakeGatherScatterTensorPtr &&
+        succeeded(state.rebuildAsUnsupportedOp(operand))) {
+      return success();
+    }
+    LLVM_DEBUG(ifOp->emitRemark(
+        "PtrAnalysis: failed to get pointer state for if op result"));
+    return failure();
+  }
+
+  state = *mergedState;
+  return success();
+}
+
+LogicalResult PtrAnalysis::rewriteIfOp(scf::IfOp op) {
+  if (failed(rewriteOp(op))) {
+    LLVM_DEBUG(llvm::dbgs() << "Failed to rewrite all ops inside if op\n");
+  }
+
+  SmallVector<std::pair<Value, PtrState>, 4> structuredPointers;
+  for (auto [resultIndex, result] : llvm::enumerate(op.getResults())) {
+    if (!maybeStructuredArgs.contains(result)) {
+      continue;
+    }
+
+    auto [thenState, elseState, mergedState] = getIfPtrState(op, resultIndex);
+    if (failed(thenState) && failed(elseState)) {
+      continue;
+    }
+
+    if (failed(mergedState)) {
+      op.walk([&](tts::GetStructuredStateOp getStateOp) {
+        structuredStateOpsToSkip.insert(getStateOp);
+      });
+      return success();
+    }
+
+    structuredPointers.push_back({result, *mergedState});
+  }
+
+  if (!structuredPointers.empty()) {
+    OpBuilder builder(op);
+    builder.setInsertionPointAfter(op);
+    for (auto [result, state] : structuredPointers) {
+      if (state.getRank() != 0) {
+        auto makeTensorPtrOp =
+            state.createTTSMakeTensorPtrOp(builder, op.getLoc());
+        ptrMap.map(result, makeTensorPtrOp.getResult());
+      }
+      knownPtrs[result] = state;
+    }
+  }
+
+  return success();
+}
+
 LogicalResult PtrAnalysis::rewriteForOp(scf::ForOp op) {
   for (auto [i, arg] : llvm::enumerate(op.getRegionIterArgs())) {
     if (!maybeStructuredArgs.contains(arg)) {
@@ -1427,7 +1580,10 @@ LogicalResult PtrAnalysis::rewriteForOp(scf::ForOp op) {
     }
 
     auto state = getLoopIterArgPtrState(op, i);
-    if (failed(state)) {
+    auto loopResultState = getLoopResultPtrState(op, i);
+    assert(failed(state) == failed(loopResultState) &&
+           "loop argument and result states should agree");
+    if (failed(state) || failed(loopResultState)) {
       // Because the maybeStructuredArgs may contain values that are not
       // considered structured by PtrAnalysis, failing to retrieve the PtrState
       // should not fail the rewrite process.
@@ -1443,6 +1599,7 @@ LogicalResult PtrAnalysis::rewriteForOp(scf::ForOp op) {
 
     // Save the current init arg's PtrState
     knownPtrs[arg] = state.value();
+    knownPtrs[op.getResult(i)] = loopResultState.value();
 
     // For tensors of pointers, create a tts.make_tptr at the beginning of the
     // loop body that correspond to this region iter arg. In case it is used
@@ -1474,6 +1631,12 @@ LogicalResult PtrAnalysis::rewriteForOp(scf::ForOp op) {
         OpBuilder builder(op.getRegion());
         auto maketptrOp = state->createTTSMakeTensorPtrOp(builder, op.getLoc());
         ptrMap.map(arg, maketptrOp.getResult());
+
+        OpBuilder::InsertionGuard guard(builder);
+        builder.setInsertionPointAfter(op);
+        auto loopPtr =
+            loopResultState->createTTSMakeTensorPtrOp(builder, op.getLoc());
+        ptrMap.map(op.getResult(i), loopPtr.getResult());
       }
     }
   }
@@ -1502,6 +1665,12 @@ PtrAnalysis::rewriteGetStructuredStateOp(tts::GetStructuredStateOp op) {
     return failure();
   }
 
+  if (structuredStateOpsToSkip.contains(op)) {
+    LLVM_DEBUG(op.emitRemark("Skip rewriting GetStructuredStateOp."));
+    op.getResult(0).replaceAllUsesWith(tritonValue);
+    return success();
+  }
+
   tts::PtrState state = knownPtrs[tritonValue];
   if (!state.isStructured()) {
     LLVM_DEBUG(op.emitRemark(
@@ -1521,9 +1690,9 @@ PtrAnalysis::rewriteGetStructuredStateOp(tts::GetStructuredStateOp op) {
     if (state.scalar) {
       replacements.push_back(state.scalar);
     } else {
-      // This operand is a pointer directly from the kernel arguments.
+      // This operand is a pointer directly from the kernel arguments or from
+      // another operation that returns a pointer.
       // Use offset 0.
-      assert(!tritonValue.getDefiningOp());
       replacements.push_back(arith::ConstantOp::create(
           builder, op.getLoc(), builder.getIndexAttr(0)));
     }
@@ -1549,6 +1718,18 @@ PtrAnalysis::rewriteGetStructuredStateOp(tts::GetStructuredStateOp op) {
         replacements.push_back(cast<Value>(s));
       }
     }
+  }
+
+  if (state.source) {
+    replacements.push_back(state.source);
+  } else {
+    replacements.push_back(
+        UnrealizedConversionCastOp::create(
+            builder,
+            op.getLoc(),
+            triton::PointerType::get(NoneType::get(op.getContext()), 1),
+            ValueRange{})
+            .getResult(0));
   }
 
   op->replaceAllUsesWith(replacements);
@@ -1681,6 +1862,23 @@ void PtrAnalysis::initializeMaybeStructuredArgs(Operation *op) {
             }
           }
         }
+      } else if (auto yieldOp = dyn_cast<scf::YieldOp>(user)) {
+        auto parentIf = dyn_cast<scf::IfOp>(yieldOp->getParentOp());
+        if (!parentIf) {
+          continue;
+        }
+        for (auto [yieldIdx, yieldOperand] :
+             llvm::enumerate(yieldOp.getOperands())) {
+          if (yieldOperand != v) {
+            continue;
+          }
+          Value ifResult = parentIf->getResult(yieldIdx);
+          maybeStructuredArgs.insert(ifResult);
+          if (!visited.contains(ifResult)) {
+            visited.insert(ifResult);
+            q.push(ifResult);
+          }
+        }
       } else {
         for (auto res : user->getResults()) {
           if (res.getType() != v.getType()) {
@@ -1790,6 +1988,12 @@ LogicalResult PtrAnalysis::rewriteOp(Operation *rootOp, bool useUnsafeMask) {
           if (rewriteForOp(forOp).failed()) {
             LLVM_DEBUG(
                 forOp->emitRemark("PtrAnalysis: Failed to rewrite ForOp"));
+          }
+          return WalkResult::skip();
+        })
+        .Case<scf::IfOp>([&](auto ifOp) {
+          if (rewriteIfOp(ifOp).failed()) {
+            LLVM_DEBUG(ifOp->emitRemark("PtrAnalysis: Failed to rewrite IfOp"));
           }
           return WalkResult::skip();
         })
