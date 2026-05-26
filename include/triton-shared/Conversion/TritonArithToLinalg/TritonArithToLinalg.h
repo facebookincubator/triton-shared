@@ -25,6 +25,7 @@ void populateTritonArithToLinalgCanonicalizationPatterns(
 void populateTritonArithToLinalgConversionPatterns(bool pidsToFuncArgs,
                                                    bool addptrToLinalg,
                                                    bool assertToCf,
+                                                   bool ttToFuncFunc,
                                                    bool transposeReduceToRank0,
                                                    RewritePatternSet &patterns);
 

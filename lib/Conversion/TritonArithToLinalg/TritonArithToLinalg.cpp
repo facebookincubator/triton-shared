@@ -47,7 +47,8 @@ void mlir::triton::populateTritonTensorPtrConversionPatterns(
 
 void mlir::triton::populateTritonArithToLinalgConversionPatterns(
     bool pidsToFuncArgs, bool addptrToLinalg, bool assertToCf,
-    bool transposeReduceToRank0, RewritePatternSet &patterns) {
+    bool ttToFuncFunc, bool transposeReduceToRank0,
+    RewritePatternSet &patterns) {
 
   if (pidsToFuncArgs) {
     patterns.add<GetProgramIDConverter, GetNumProgramsConverter>(
@@ -59,12 +60,14 @@ void mlir::triton::populateTritonArithToLinalgConversionPatterns(
   if (assertToCf) {
     patterns.add<AssertConverter>(patterns.getContext());
   }
+  if (ttToFuncFunc) {
+    patterns.add<CallConverter>(patterns.getContext());
+  }
   patterns.add<BroadcastConverter>(patterns.getContext());
   patterns.add<TransposeConverter>(patterns.getContext());
   patterns.add<MakeRangeConverter>(patterns.getContext());
   patterns.add<ExpandDimsConverter>(patterns.getContext());
   patterns.add<BitcastConverter>(patterns.getContext());
-  patterns.add<CallConverter>(patterns.getContext());
   patterns.add<MulHiUIOpConverter>(patterns.getContext());
   patterns.add<PreciseSqrtConverter>(patterns.getContext());
   patterns.add<PreciseDivConverter>(patterns.getContext());
