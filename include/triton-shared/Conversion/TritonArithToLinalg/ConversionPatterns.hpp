@@ -2033,6 +2033,13 @@ public:
           op, "Only support cumsum variant of scan op");
     }
 
+    // CumSumOp has no reverse attribute. Fall back to later scan lowering,
+    // which can preserve reverse iteration semantics.
+    if (op.getReverse()) {
+      return rewriter.notifyMatchFailure(
+          op, "reverse cumsum is not supported by CumSumOp");
+    }
+
     auto input = op.getOperand(0);
     auto axis = op.getAxis();
     auto type = dyn_cast<RankedTensorType>(input.getType());
