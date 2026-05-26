@@ -424,11 +424,14 @@ public:
                   auto offsetType =
                       getPtrOffsetType(offsetInfo.ptrType, offsetInfo.bitWidth);
 
-                  // We're setting both the types of the iter-arg and the
-                  // corresponding result directly to the offset type.
-                  // At this point, the IR is in an invalid state because the
-                  // init-args still have tt.ptr. But at the end, we will
-                  // replace all uses of the tt.ptr to offset values.
+                  // We're setting the init-arg, iter-arg, and result directly
+                  // to the offset type. For scalar pointers, update the
+                  // init-arg immediately to keep the scf.for type contract
+                  // valid while the pass continues rewriting uses.
+                  if (!isa<RankedTensorType>(offsetInfo.ptrType)) {
+                    forOp.getInitArgsMutable()[argIndex].assign(
+                        offsetInfo.offset);
+                  }
                   auto iterArg = forOp.getRegionIterArg(argIndex);
                   iterArg.setType(offsetType);
 
