@@ -769,8 +769,18 @@ LogicalResult MaskState::parseSplat(triton::SplatOp splatOp, const Location loc,
   if (failed(this->parse(src, loc, builder)))
     return failure();
 
-  for (auto s : dstShape)
-    this->dims.push_back(builder.getIndexAttr(s));
+  if (this->scalar && isBoolLike(this->scalar)) {
+    auto zero = builder.getIndexAttr(0);
+    for (auto s : dstShape) {
+      auto shapeDim = builder.getIndexAttr(s);
+      this->dims.push_back(
+          selectOFRs(this->scalar, shapeDim, zero, loc, builder));
+    }
+    this->scalar = OpFoldResult();
+  } else {
+    for (auto s : dstShape)
+      this->dims.push_back(builder.getIndexAttr(s));
+  }
   bool isBool = src.getType().isInteger(1);
   if (isBool) {
     // If src is a 1D boolean tensor and parse success.

@@ -27,6 +27,9 @@ std::optional<int64_t> getIntAttr(const OpFoldResult ofr);
 // attribute or a constant value.
 bool hasConstZero(const OpFoldResult ofr);
 
+// Return true if ofr represents a boolean value or boolean-like constant.
+bool isBoolLike(const OpFoldResult ofr);
+
 // Cast OpFoldResult to Value.
 Value ofrToValue(const OpFoldResult ofr, const Location loc, OpBuilder &b);
 

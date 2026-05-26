@@ -52,6 +52,17 @@ bool hasConstZero(const OpFoldResult ofr) {
   return false;
 }
 
+bool isBoolLike(const OpFoldResult ofr) {
+  auto intAttr = getIntAttr(ofr);
+  if (intAttr.has_value()) {
+    return intAttr.value() == 0 || intAttr.value() == 1;
+  }
+
+  auto val = dyn_cast<Value>(ofr);
+  assert(val);
+  return val.getType().isInteger(1);
+}
+
 Value ofrToValue(const OpFoldResult ofr, const Location loc, OpBuilder &b) {
   if (Value val = dyn_cast<Value>(ofr)) {
     return val;
