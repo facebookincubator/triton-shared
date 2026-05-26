@@ -49,7 +49,7 @@ public:
     addConversion([](Type type) { return type; });
     addConversion([](triton::PointerType ptrType) {
       return UnrankedMemRefType::get(ptrType.getPointeeType(),
-                                     /*memorySpace=*/0);
+                                     ptrType.getAddressSpace());
     });
     addConversion([](RankedTensorType tensorType) -> std::optional<Type> {
       if (auto ptrType =

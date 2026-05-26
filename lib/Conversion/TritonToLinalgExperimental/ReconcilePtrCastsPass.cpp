@@ -93,7 +93,10 @@ struct FromMemrefConverter
       auto memSpace = tptr::DefaultMemorySpaceAttr::get(rewriter.getContext());
       Value rankedMemref = memref::CastOp::create(
           rewriter, op.getLoc(),
-          MemRefType::get({1}, unrankedInput.getElementType()), input);
+          MemRefType::get({1}, unrankedInput.getElementType(),
+                          MemRefLayoutAttrInterface{},
+                          unrankedInput.getMemorySpace()),
+          input);
       rankedMemref = memref::MemorySpaceCastOp::create(
           rewriter, op.getLoc(),
           MemRefType::get({1}, unrankedInput.getElementType(),
@@ -150,8 +153,10 @@ struct ToMemrefConverter : public OpRewritePattern<UnrealizedConversionCastOp> {
       SmallVector<OpFoldResult> newStrides = {rewriter.getIndexAttr(1)};
       auto newUnrankedMemref = memref::ReinterpretCastOp::create(
           rewriter, op->getLoc(),
-          MemRefType::get({ShapedType::kDynamic}, elemType), ptrToMemref,
-          rewriter.getIndexAttr(0), sizes, newStrides);
+          MemRefType::get({ShapedType::kDynamic}, elemType,
+                          MemRefLayoutAttrInterface{},
+                          outUnrankedMemrefType.getMemorySpace()),
+          ptrToMemref, rewriter.getIndexAttr(0), sizes, newStrides);
 
       rewriter.replaceAllUsesWith(output, newUnrankedMemref);
       rewriter.eraseOp(op);

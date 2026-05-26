@@ -40,11 +40,13 @@ MemRefType PtrState::getResultMemrefType(MLIRContext *context, int64_t offset,
     dispatchIndexOpFoldResults(strides, dynamicStrides, staticStrides);
   }
 
-  auto elementType = cast<BaseMemRefType>(source.getType()).getElementType();
+  auto sourceType = cast<BaseMemRefType>(source.getType());
+  auto elementType = sourceType.getElementType();
+  auto memorySpace = sourceType.getMemorySpace();
   auto layout =
       StridedLayoutAttr::get(source.getContext(), offset, staticStrides);
 
-  return MemRefType::get(resultShape, elementType, layout);
+  return MemRefType::get(resultShape, elementType, layout, memorySpace);
 }
 
 OpFoldResult

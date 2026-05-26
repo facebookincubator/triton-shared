@@ -46,7 +46,8 @@ public:
   PtrToUnrankedMemrefConverter() {
     addConversion([](Type type) { return type; });
     addConversion([](triton::PointerType ptrType) {
-      return UnrankedMemRefType::get(ptrType.getPointeeType(), 0);
+      return UnrankedMemRefType::get(ptrType.getPointeeType(),
+                                     ptrType.getAddressSpace());
     });
     addTargetMaterialization([&](OpBuilder &builder,
                                  UnrankedMemRefType resultType,

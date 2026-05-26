@@ -76,14 +76,16 @@ static MemRefType getResultMemrefType(tts::MakeTensorPtrOp op, int64_t offset,
 static MemRefType getResultMemrefType(tts::MakeGatherScatterTensorPtrOp op,
                                       int64_t offset,
                                       ArrayRef<int64_t> staticStrides,
-                                      ArrayRef<int64_t> resultShape) {
+                                      ArrayRef<int64_t> resultShape,
+                                      Value base) {
   auto layout = StridedLayoutAttr::get(op.getContext(), offset, staticStrides);
 
   auto ptrType = cast<triton::PointerType>(
       cast<RankedTensorType>(op.getType()).getElementType());
   Type elemType = ptrType.getPointeeType();
 
-  return MemRefType::get(resultShape, elemType, layout);
+  auto memorySpace = cast<BaseMemRefType>(base.getType()).getMemorySpace();
+  return MemRefType::get(resultShape, elemType, layout, memorySpace);
 }
 
 // If there are dimensions with size 1 and stride 0, replace 0 stride with
@@ -159,7 +161,7 @@ static Value rewriteGatherScatterPtrElement(
   auto staticTargetOffset = getIntAttr(targetOffset);
   auto resultType =
       getResultMemrefType(op, staticTargetOffset.value_or(ShapedType::kDynamic),
-                          staticStrides, resultShape);
+                          staticStrides, resultShape, basePtr);
 
   std::vector<int64_t> staticSizes = op.getSizes();
   staticSizes[gatherDim] = 1;
@@ -224,11 +226,13 @@ private:
 
   static MemRefType getResultMemrefType(tts::MakeTensorPtrOp op, int64_t offset,
                                         ArrayRef<int64_t> staticStrides,
-                                        ArrayRef<int64_t> resultShape) {
+                                        ArrayRef<int64_t> resultShape,
+                                        Value base) {
     auto layout =
         StridedLayoutAttr::get(op.getContext(), offset, staticStrides);
     Type elemType = getElementTypeStructuredPtr(op);
-    return MemRefType::get(resultShape, elemType, layout);
+    auto memorySpace = cast<BaseMemRefType>(base.getType()).getMemorySpace();
+    return MemRefType::get(resultShape, elemType, layout, memorySpace);
   }
 
   std::pair<memref::ReinterpretCastOp, memref::ReinterpretCastOp>
@@ -290,7 +294,8 @@ private:
             // should be the same as the original column.
             // The last chunk may be smaller due to
             // wrapping around.
-            ShapedType::kDynamic});
+            ShapedType::kDynamic},
+        adaptor.getBase());
 
     Value rowSize = arith::ConstantOp::create(
         rewriter, loc, rewriter.getIndexAttr(op.getSizes()[0]));
@@ -420,7 +425,8 @@ private:
 
             // Col stays the same, which is resultShape[1], but mlir doesn't
             // allow this anymore. So we put dynamic instead.
-            ShapedType::kDynamic});
+            ShapedType::kDynamic},
+        adaptor.getBase());
 
     Value rowSize = arith::ConstantOp::create(
         rewriter, loc, rewriter.getIndexAttr(op.getSizes()[0]));
@@ -509,7 +515,7 @@ private:
     auto staticTargetOffset = getIntAttr(targetOffset);
     auto resultType = getResultMemrefType(
         op, staticTargetOffset.value_or(ShapedType::kDynamic), staticStrides,
-        resultShape);
+        resultShape, adaptor.getBase());
 
     auto castOp = memref::ReinterpretCastOp::create(
         rewriter, op.getLoc(), resultType, adaptor.getBase(), targetOffset,
