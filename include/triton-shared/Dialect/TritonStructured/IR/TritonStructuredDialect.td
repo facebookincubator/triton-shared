@@ -303,7 +303,7 @@ def TTS_UnstructuredAtomicRMWOp : TTS_Op<"unstructured_atomic_rmw", [
   OptionalTypesMatchWith<"mask type matches offset type", "offset", "mask",
                  "triton::getI1SameShape($_self)">
 ]> {
-  let summary = "atomic read-modify-write with a tensor of per-element offsets (unstructured fallback)";
+  let summary = "atomic read-modify-write with a tensor of per-element offsets";
 
   let arguments = (
     ins

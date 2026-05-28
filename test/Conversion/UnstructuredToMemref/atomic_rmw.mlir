@@ -4,10 +4,6 @@
 
 module {
 
-  // -----------------------------------------------------------------------
-  // Test 1: fadd without mask.
-  // Expected: linalg.generic with memref.atomic_rmw addf, no scf.if.
-  // -----------------------------------------------------------------------
   // CHECK-LABEL: tt.func public @atomic_fadd_no_mask
   // CHECK-NOT:   tt.atomic_rmw
   // CHECK-NOT:   tts.unstructured_atomic_rmw
@@ -30,10 +26,6 @@ module {
     tt.return %old : tensor<64xf32>
   }
 
-  // -----------------------------------------------------------------------
-  // Test 2: fadd with mask.
-  // Expected: linalg.generic with scf.if(mask) { memref.atomic_rmw addf }.
-  // -----------------------------------------------------------------------
   // CHECK-LABEL: tt.func public @atomic_fadd_with_mask
   // CHECK-NOT:   tt.atomic_rmw
   // CHECK-NOT:   tts.unstructured_atomic_rmw
@@ -63,10 +55,6 @@ module {
     tt.return %old : tensor<64xf32>
   }
 
-  // -----------------------------------------------------------------------
-  // Test 3: integer addi without mask.
-  // Expected: linalg.generic with memref.atomic_rmw addi, no scf.if.
-  // -----------------------------------------------------------------------
   // CHECK-LABEL: tt.func public @atomic_addi_no_mask
   // CHECK-NOT:   tt.atomic_rmw
   // CHECK-NOT:   tts.unstructured_atomic_rmw
