@@ -200,7 +200,7 @@ FailureOr<TilingResult> getTiledImplementation(TritonTilingExtOpTy op,
 
   Operation *tiledOp = clone(b, op, resultTensorTypes, tiledValues);
 
-  return TilingResult{{tiledOp}, SmallVector<Value>(tiledOp->getResults())};
+  return TilingResult{{tiledOp}, SmallVector<Value>(tiledOp->getResults()), {}};
 }
 
 //
@@ -337,7 +337,8 @@ generateResultTileValue(TritonTilingExtOpTy op, OpBuilder &b,
 
   return TilingResult{
       tilingResult->tiledOps,
-      SmallVector<Value>{tilingResult->tiledValues[resultNumber]}};
+      SmallVector<Value>{tilingResult->tiledValues[resultNumber]},
+      {}};
 }
 
 // This method is borrowed directly from linalg.generic's implementation

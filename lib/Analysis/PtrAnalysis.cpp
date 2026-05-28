@@ -1192,9 +1192,6 @@ void PtrAnalysis::rewriteForOp(
         OpBuilder::InsertionGuard g(b);
         b.setInsertionPointToStart(b.getBlock());
 
-        Value zero =
-            arith::ConstantOp::create(rewriter, loc, rewriter.getIndexAttr(0));
-
         for (auto &[unrealizedCastOp, chunkData, state] : moduloStates) {
           SmallVector<Value> newReinterpretCasts;
           for (auto &chunk : chunkData) {

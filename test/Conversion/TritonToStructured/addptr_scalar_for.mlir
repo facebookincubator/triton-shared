@@ -48,8 +48,10 @@ module {
 // CHECK:             [[VAR_8_:%.+]] = "tts.load"([[VAR_7_]]) <{operandSegmentSizes = array<i32: 1, 0, 0>, static_mask_dims = array<i64>}> : (tensor<1024x!tt.ptr<f32>>) -> tensor<1024xf32>
 // CHECK:             [[VAR_9_:%.+]] = math.exp [[VAR_8_]] : tensor<1024xf32>
 // CHECK-DAG:         [[VAR_10_:%.+]] = arith.addf [[VAR_arg6_]], [[VAR_9_]] : tensor<1024xf32>
-// CHECK-DAG:         [[VAR_11_:%.+]] = arith.addi [[VAR_arg7_]], [[VAR_arg5_]] : index
-// CHECK:             scf.yield [[VAR_11_]], [[VAR_10_]] : index, tensor<1024xf32>
+// CHECK-DAG:         [[VAR_11_:%.+]] = arith.index_cast [[VAR_arg5_]] : index to i32
+// CHECK-DAG:         [[VAR_12_:%.+]] = arith.index_cast [[VAR_11_]] : i32 to index
+// CHECK:             [[VAR_13_:%.+]] = arith.addi [[VAR_arg7_]], [[VAR_12_]] : index
+// CHECK:             scf.yield [[VAR_13_]], [[VAR_10_]] : index, tensor<1024xf32>
 // CHECK:           }
 // CHECK:           [[VAR_4_:%.+]] = arith.muli [[VAR_0_]], [[PARAM_3_]] : i32
 // CHECK:           [[VAR_5_:%.+]] = arith.index_cast [[VAR_4_]] : i32 to index

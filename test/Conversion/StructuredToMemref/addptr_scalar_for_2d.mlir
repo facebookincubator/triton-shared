@@ -84,8 +84,10 @@ module {
 // CHECK:               [[VAR_15_1_:%.+]] = arith.addf [[IN_2_]], [[IN_3_]] : f32
 // CHECK:               linalg.yield [[VAR_15_1_]] : f32
 // CHECK:             } -> tensor<128x128xf32>
-// CHECK-DAG:         [[VAR_13_:%.+]] = arith.addi [[VAR_arg14_]], [[VAR_arg11_]] : index
-// CHECK:             scf.yield [[VAR_11_]], [[VAR_13_]] : tensor<128x128xf32>, index
+// CHECK-DAG:         [[VAR_12_:%.+]] = arith.index_cast [[VAR_arg11_]] : index to i32
+// CHECK-DAG:         [[VAR_13_:%.+]] = arith.index_cast [[VAR_12_]] : i32 to index
+// CHECK:             [[VAR_14_:%.+]] = arith.addi [[VAR_arg14_]], [[VAR_13_]] : index
+// CHECK:             scf.yield [[VAR_11_]], [[VAR_14_]] : tensor<128x128xf32>, index
 // CHECK:           }
 // CHECK:           [[VAR_5_:%.+]] = arith.muli [[PARAM_8_]], [[PARAM_3_]] : i32
 // CHECK:           [[VAR_6_:%.+]] = arith.index_cast [[VAR_5_]] : i32 to index
