@@ -394,18 +394,19 @@ public:
                   return success();
                 })
                 .Case<tts::MakeGatherScatterTensorPtrOp>(
-                    [&](Operation *op) { return success(); })    
+                    [&](Operation *op) { return success(); })
                 .Case<triton::LoadOp, triton::StoreOp, triton::AtomicRMWOp,
                       tts::MakeTensorPtrOp>([&](Operation *op) {
-                  // Special case:
-                  // We do not want to create "unstructured tensor pointer" into
-                  // tts.make_tptr if the base pointer is directly from the
-                  // kernel arguments.
-                  if (auto makeTensorPtr = dyn_cast<tts::MakeTensorPtrOp>(op)) {
-                    if (ptrArgs.contains(makeTensorPtr.getBase())) {
-                      return success();
-                    }
-                  }
+                      // Special case:
+                      // We do not want to create "unstructured tensor pointer"
+                      // into tts.make_tptr if the base pointer is directly from
+                      // the kernel arguments.
+                      if (auto makeTensorPtr =
+                              dyn_cast<tts::MakeTensorPtrOp>(op)) {
+                        if (ptrArgs.contains(makeTensorPtr.getBase())) {
+                          return success();
+                        }
+                      }
 
                       ptrUsers.push_back(op);
                       return success();
@@ -509,7 +510,7 @@ public:
               })
               .Case<triton::AtomicRMWOp>([&](triton::AtomicRMWOp atomicOp) {
                 auto offsetInfo = offsetMap.at(atomicOp.getPtr());
-                auto newOp = tts::AtomicRMWOp::create(
+                auto newOp = tts::UnstructuredAtomicRMWOp::create(
                     b, loc, atomicOp.getType(), offsetInfo.ptr,
                     offsetInfo.offset, atomicOp.getVal(), atomicOp.getMask(),
                     atomicOp.getAtomicRmwOp(), atomicOp.getSem(),

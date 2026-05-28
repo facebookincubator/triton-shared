@@ -298,12 +298,12 @@ def TTS_ScatterOp : TTS_Op<"scatter", [
   }];
 }
 
-def TTS_AtomicRMWOp : TTS_Op<"atomic_rmw", [
+def TTS_UnstructuredAtomicRMWOp : TTS_Op<"unstructured_atomic_rmw", [
   MemoryEffects<[MemRead, MemWrite]>,
   OptionalTypesMatchWith<"mask type matches offset type", "offset", "mask",
                  "triton::getI1SameShape($_self)">
 ]> {
-  let summary = "atomic read-modify-write on a base pointer with a tensor of offsets";
+  let summary = "atomic read-modify-write with a tensor of per-element offsets (unstructured fallback)";
 
   let arguments = (
     ins

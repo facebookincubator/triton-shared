@@ -376,15 +376,18 @@ struct ScatterConverter : public OpConversionPattern<tts::ScatterOp> {
   }
 };
 
-// Lowering tts.atomic_rmw to linalg.generic { memref.atomic_rmw }.
-struct AtomicRMWConverter : public OpConversionPattern<tts::AtomicRMWOp> {
-  using OpConversionPattern<tts::AtomicRMWOp>::OpConversionPattern;
+// Lowering tts.unstructured_atomic_rmw to linalg.generic { memref.atomic_rmw }.
+struct UnstructuredAtomicRMWConverter
+    : public OpConversionPattern<tts::UnstructuredAtomicRMWOp> {
+  using OpConversionPattern<tts::UnstructuredAtomicRMWOp>::OpConversionPattern;
 
-  AtomicRMWConverter(const TypeConverter &typeConverter, MLIRContext *context)
-      : OpConversionPattern<tts::AtomicRMWOp>(typeConverter, context) {}
+  UnstructuredAtomicRMWConverter(const TypeConverter &typeConverter,
+                                 MLIRContext *context)
+      : OpConversionPattern<tts::UnstructuredAtomicRMWOp>(typeConverter,
+                                                          context) {}
 
-  AtomicRMWConverter(MLIRContext *context)
-      : OpConversionPattern<tts::AtomicRMWOp>(context) {}
+  UnstructuredAtomicRMWConverter(MLIRContext *context)
+      : OpConversionPattern<tts::UnstructuredAtomicRMWOp>(context) {}
 
   /// Map triton::RMWOp to arith::AtomicRMWKind.
   static arith::AtomicRMWKind convertRMWKind(triton::RMWOp rmwOp) {
@@ -404,7 +407,7 @@ struct AtomicRMWConverter : public OpConversionPattern<tts::AtomicRMWOp> {
   }
 
   LogicalResult
-  matchAndRewrite(tts::AtomicRMWOp atomicOp, OpAdaptor adaptor,
+  matchAndRewrite(tts::UnstructuredAtomicRMWOp atomicOp, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto loc = atomicOp->getLoc();
 
@@ -532,13 +535,14 @@ public:
         bufferization::BufferizationDialect, memref::MemRefDialect,
         ttx::TritonTilingExtDialect>();
 
-    target.addIllegalOp<tts::GatherOp, tts::ScatterOp, tts::AtomicRMWOp>();
+    target.addIllegalOp<tts::GatherOp, tts::ScatterOp,
+                        tts::UnstructuredAtomicRMWOp>();
 
     PtrToUnrankedMemrefConverter typeConverter;
 
-    patterns.add<GatherConverter, ScatterConverter, AtomicRMWConverter,
-                 ScalarLoadConverter, ScalarStoreConverter>(
-        typeConverter, patterns.getContext());
+    patterns.add<GatherConverter, ScatterConverter,
+                 UnstructuredAtomicRMWConverter, ScalarLoadConverter,
+                 ScalarStoreConverter>(typeConverter, patterns.getContext());
 
     if (failed(applyPartialConversion(moduleOp, target, std::move(patterns))))
       signalPassFailure();

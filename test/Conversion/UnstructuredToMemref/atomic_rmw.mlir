@@ -10,7 +10,7 @@ module {
   // -----------------------------------------------------------------------
   // CHECK-LABEL: tt.func public @atomic_fadd_no_mask
   // CHECK-NOT:   tt.atomic_rmw
-  // CHECK-NOT:   tts.atomic_rmw
+  // CHECK-NOT:   tts.unstructured_atomic_rmw
   // CHECK:       [[CAST:%.+]] = builtin.unrealized_conversion_cast %arg0 : !tt.ptr<f32> to memref<*xf32>
   // CHECK:       [[BASE:%.+]] = memref.cast [[CAST]] : memref<*xf32> to memref<?xf32>
   // CHECK:       linalg.generic {indexing_maps = [#[[MAP]], #[[MAP]], #[[MAP]]], iterator_types = ["parallel"]} ins(%arg2, %arg1 : tensor<64xi32>, tensor<64xf32>)
@@ -36,7 +36,7 @@ module {
   // -----------------------------------------------------------------------
   // CHECK-LABEL: tt.func public @atomic_fadd_with_mask
   // CHECK-NOT:   tt.atomic_rmw
-  // CHECK-NOT:   tts.atomic_rmw
+  // CHECK-NOT:   tts.unstructured_atomic_rmw
   // CHECK:       [[CAST2:%.+]] = builtin.unrealized_conversion_cast %arg0 : !tt.ptr<f32> to memref<*xf32>
   // CHECK:       [[BASE2:%.+]] = memref.cast [[CAST2]] : memref<*xf32> to memref<?xf32>
   // CHECK:       linalg.generic {indexing_maps = [#[[MAP]], #[[MAP]], #[[MAP]], #[[MAP]]], iterator_types = ["parallel"]} ins(%arg2, %arg1, %arg3 : tensor<64xi32>, tensor<64xf32>, tensor<64xi1>)
@@ -69,7 +69,7 @@ module {
   // -----------------------------------------------------------------------
   // CHECK-LABEL: tt.func public @atomic_addi_no_mask
   // CHECK-NOT:   tt.atomic_rmw
-  // CHECK-NOT:   tts.atomic_rmw
+  // CHECK-NOT:   tts.unstructured_atomic_rmw
   // CHECK:       memref.atomic_rmw addi {{.*}}, {{.*}}[{{.*}}] : (i32, memref<?xi32>) -> i32
   tt.func public @atomic_addi_no_mask(
       %out_ptr: !tt.ptr<i32>,
