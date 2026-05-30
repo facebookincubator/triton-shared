@@ -326,6 +326,8 @@ def TTS_LoadOp : TTS_Op<"load", [
     }
   }];
 
+  let hasFolder = 1;
+
   // TODO
   //let hasCustomAssemblyFormat = 1;
   //let hasVerifier = 1;
@@ -356,6 +358,8 @@ def TTS_StoreOp : TTS_Op<"store", [
       return !getMixedMaskDims().empty();
     }
   }];
+
+  let hasFolder = 1;
 
   // TODO
   //let hasCustomAssemblyFormat = 1;

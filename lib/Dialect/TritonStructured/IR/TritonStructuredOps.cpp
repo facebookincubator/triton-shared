@@ -24,6 +24,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <type_traits>
 #include <utility>
 
 #define GET_OP_CLASSES
@@ -105,6 +106,32 @@ Value getScalarValue(Value operand, Location loc, OpBuilder &builder) {
 }
 
 } // namespace utils
+
+template <typename T, typename = std::enable_if_t<
+                          llvm::is_one_of<T, LoadOp, StoreOp>::value>>
+static auto foldMemoryAccessOp(T op) {
+  SmallVector<OpFoldResult> mixedMaskDims(op.getMixedMaskDims());
+
+  // No constant operands were folded, just return.
+  if (failed(foldDynamicIndexList(mixedMaskDims, /*onlyNonNegative=*/true))) {
+    if constexpr (std::is_same_v<T, StoreOp>) {
+      return failure();
+    } else {
+      return OpFoldResult{};
+    }
+  }
+
+  auto [staticMaskDims, variableMaskDims] = decomposeMixedValues(mixedMaskDims);
+
+  op.setStaticMaskDims(staticMaskDims);
+  op.getMaskDimsMutable().assign(variableMaskDims);
+
+  if constexpr (std::is_same_v<T, StoreOp>) {
+    return success();
+  } else {
+    return OpFoldResult{op.getResult()};
+  }
+}
 
 void MakeTensorPtrOp::build(OpBuilder &b, OperationState &state, Value base,
                             ArrayRef<int64_t> sizes,
@@ -303,6 +330,8 @@ LogicalResult MakeGatherScatterTensorPtrOp::verify() {
   return success();
 }
 
+OpFoldResult LoadOp::fold(FoldAdaptor) { return foldMemoryAccessOp(*this); }
+
 void LoadOp::build(OpBuilder &b, OperationState &state, Value ptr,
                    ArrayRef<OpFoldResult> dims, Value other) {
   SmallVector<int64_t> staticDims;
@@ -328,6 +357,10 @@ void LoadOp::build(OpBuilder &b, OperationState &state, Value ptr,
   }
   build(b, state, resType, ptr, dynamicDims, b.getDenseI64ArrayAttr(staticDims),
         other);
+}
+
+LogicalResult StoreOp::fold(FoldAdaptor, SmallVectorImpl<OpFoldResult> &) {
+  return foldMemoryAccessOp(*this);
 }
 
 void StoreOp::build(OpBuilder &b, OperationState &state, Value ptr, Value value,
