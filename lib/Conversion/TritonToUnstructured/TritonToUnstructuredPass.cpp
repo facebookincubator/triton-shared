@@ -395,8 +395,8 @@ public:
                 })
                 .Case<tts::MakeGatherScatterTensorPtrOp>(
                     [&](Operation *op) { return success(); })
-                .Case<triton::LoadOp, triton::StoreOp, tts::MakeTensorPtrOp>(
-                    [&](Operation *op) {
+                .Case<triton::LoadOp, triton::StoreOp, triton::AtomicRMWOp,
+                      tts::MakeTensorPtrOp>([&](Operation *op) {
                       // Special case:
                       // We do not want to create "unstructured tensor pointer"
                       // into tts.make_tptr if the base pointer is directly from
@@ -506,6 +506,17 @@ public:
                                        offsetInfo.offset, store.getValue(),
                                        store.getMask());
                 store->erase();
+                return success();
+              })
+              .Case<triton::AtomicRMWOp>([&](triton::AtomicRMWOp atomicOp) {
+                auto offsetInfo = offsetMap.at(atomicOp.getPtr());
+                auto newOp = tts::UnstructuredAtomicRMWOp::create(
+                    b, loc, atomicOp.getType(), offsetInfo.ptr,
+                    offsetInfo.offset, atomicOp.getVal(), atomicOp.getMask(),
+                    atomicOp.getAtomicRmwOp(), atomicOp.getSem(),
+                    atomicOp.getScope());
+                atomicOp->replaceAllUsesWith(newOp->getResults());
+                atomicOp->erase();
                 return success();
               })
               .Case<tts::MakeTensorPtrOp>([&](auto makeTensorPtr) {
