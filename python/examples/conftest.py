@@ -4,14 +4,24 @@
 import pytest
 import os
 import tempfile
+import torch
 import triton
 from triton.backends.triton_shared.driver import CPUDriver
 
 triton.runtime.driver.set_active(CPUDriver())
 
+if not torch.cuda.is_available():
+    torch.cuda.get_device_capability = lambda *args, **kwargs: (0, 0)
 
-def empty_decorator(func):
-    return func
+
+def empty_decorator(func=None, *args, **kwargs):
+    if func is not None and callable(func):
+        return func
+
+    def decorator(func):
+        return func
+
+    return decorator
 
 
 pytest.mark.interpreter = empty_decorator
@@ -48,49 +58,49 @@ def with_allocator():
         triton.set_allocator(NullAllocator())
 
 
-core_tests_supported = {
-    "test_store_eviction_policy",
-    "test_unary_op",
-    "test_umulhi",
-    "test_for_iv",
-    "test_trans_2d",
-    "test_math_op",
-    "test_math_fma_op",
-    "test_abs",
-    "test_call",
-    "test_vectorization",
-    "test_convert_float16_to_float32",
-    "test_index1d",
-    "test_shift_op",
-    "test_full",
-    "test_floordiv",
-    "test_empty_kernel",
-    "test_if_return",
-    "test_value_specialization",
-    "test_propagate_nan",
-    "test_clamp",
-    "test_clamp_symmetric",
-    "test_store_cache_modifier",
-    "test_permute",
-    "test_broadcast",
-    "test_precise_math",
-    "test_vectorization_hints",
-    "test_dot",
-    "test_value_specialization_overflow",
-    "test_bitwise_op",
-    "test_const",
-    "test_unary_math",
-    "test_dot_mulbroadcasted",
-    "test_masked_load_scalar",
-    "test_enable_fp_fusion",
-    "test_load_cache_modifier",
-    "test_dot_without_load",
-    "test_cat",
-    "test_addptr",
-    "test_transpose",
-    "test_trans_4d",
-    "test_unsplat",
-    "test_arange",
+unsupported_case = {
+    # 'INT_MIN % -1' run into Floating point exception, which is not handled in x86 CPU
+    "test_bin_op",
+    "test_atomic_rmw",
+    "test_tensor_atomic_rmw",
+    "test_tensor_atomic_add_non_exclusive_offset",
+    "test_tensor_atomic_add_shift_1",
+    "test_tensor_atomic_add_access_patterns",
+    "test_atomic_cas",
+    "test_tensor_atomic_cas",
+    "test_tensor_atomic_use_result",
+    "test_scaled_dot",
+    "test_atomic_rmw_predicate",
+    "test_tensor_atomic_rmw_block",
+    "test_atomic_min_max_neg_zero",
+    # do not support launch_cooperative_grid on CPU
+    "test_load_scope_sem_coop_grid_cta_not_one",
+    "test_load_scope_sem_coop_grid_cta_one",
+    # do not support IR CHECK with 'ttgir' on CPU
+    "test_optimize_thread_locality",
+    "test_cat_nd",
+    "test_math_erf_op",
+    "test_shapes_as_params",
+    "test_no_rematerialization_op",
+    "test_generic_reduction",
+    "test_assume",
+    "test_pointer_arguments",
+    "test_num_warps_pow2",
+    "test_map_elementwise",
+    "test_map_elementwise_multiple_outputs",
+    "test_map_elementwise_pack",
+    "test_reshape",
+    "test_trans_reshape",
+    "test_constexpr_if_return",
+    "test_tl_range_fuse",
+    "test_gather",
+    "test_tl_range_fuse_dependent",
+    "test_tl_range_option_none",
+    "test_disable_licm",
+    "test_zero_strided_tensors",
+    "test_unroll_attr",
+    "test_tensor_member",
+    "test_libdevice_rint",
 }
 
 annotations_tests_supported = {
@@ -99,10 +109,16 @@ annotations_tests_supported = {
 }
 
 
+def _is_float8_dtype(value):
+    value = str(value)
+    return "float8" in value or "fp8" in value
+
+
 def pytest_collection_modifyitems(config, items):
     skip_marker = pytest.mark.skip(reason="CPU backend does not support it yet")
     # There is a dependency issue on build machine which breaks bfloat16
     skip_marker_bfloat = pytest.mark.skip(reason="bfloat16 linking issue")
+    skip_marker_float16 = pytest.mark.skip(reason="float16 linking issue")
     skip_marker_tf32 = pytest.mark.skip(reason="tf32 is not supported on CPU")
     skip_marker_float8 = pytest.mark.skip(reason="float8 is not supported on CPU")
 
@@ -110,7 +126,7 @@ def pytest_collection_modifyitems(config, items):
         test_func_name = item.originalname if item.originalname else item.name
 
         test_file = str(item.fspath)
-        if test_file.endswith("test_core.py") and test_func_name not in core_tests_supported:
+        if test_file.endswith("test_core.py") and (test_func_name in unsupported_case):
             item.add_marker(skip_marker)
             continue
 
@@ -120,10 +136,13 @@ def pytest_collection_modifyitems(config, items):
 
         if "parametrize" in item.keywords:
             for param_name, param_value in item.callspec.params.items():
-                if (param_name.startswith('dtype') or param_name.endswith('dtype')) and param_value == 'bfloat16':
-                    item.add_marker(skip_marker_bfloat)
+                if ('dtype' in param_name or param_name == "in_type_str"):
+                    if param_value == 'bfloat16':
+                        item.add_marker(skip_marker_bfloat)
+                    if _is_float8_dtype(param_value):
+                        item.add_marker(skip_marker_float8)
+                    if param_value == 'float16' or param_value == 'fp16':
+                        item.add_marker(skip_marker_float16)
                 if param_name.startswith('input_precision') and (param_value.startswith('tf32')
                                                                  or param_value.startswith('bf16')):
                     item.add_marker(skip_marker_tf32)
-                if (param_name.startswith('dtype') or param_name.endswith('dtype')) and ('float8' in str(param_value)):
-                    item.add_marker(skip_marker_float8)

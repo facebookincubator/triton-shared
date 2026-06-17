@@ -1,8 +1,8 @@
-add_triton_library(TritonPtrToMemref
-  TritonPtrToMemrefPass.cpp
+add_triton_library(TritonPtrToPtr
+  TritonPtrToPtrPass.cpp
 
   DEPENDS
-  TritonPtrToMemrefConversionPassIncGen
+  TritonPtrToPtrConversionPassIncGen
 
   LINK_LIBS PUBLIC
   MLIRArithDialect

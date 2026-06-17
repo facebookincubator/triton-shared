@@ -5,7 +5,7 @@
 // CHECK: %extracted = tensor.extract %collapsed[%arg33] : tensor<512xi32>
 // CHECK: %[[V26:.*]] = arith.index_cast %extracted : i32 to index
 // CHECK: %extracted_slice = tensor.extract_slice %{{.*}}[%arg33, 0] [1, 128] [1, 1] : tensor<512x128xf32> to tensor<1x128xf32>
-// CHECK: %reinterpret_cast = memref.reinterpret_cast %arg5 to offset: [%[[V26]]], sizes: [1, 128], strides: [1, 1] : memref<*xf32> to memref<1x128xf32, strided<[1, 1], offset: ?>>
+// CHECK: %reinterpret_cast = memref.reinterpret_cast %memspacecast to offset: [%[[V26]]], sizes: [1, 128], strides: [1, 1] : memref<1xf32> to memref<1x128xf32, strided<[1, 1], offset: ?>>
 // CHECK: bufferization.materialize_in_destination %extracted_slice in writable %reinterpret_cast : (tensor<1x128xf32>, memref<1x128xf32, strided<[1, 1], offset: ?>>) -> ()
 // CHECK-NEXT: }
 

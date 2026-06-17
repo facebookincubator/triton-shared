@@ -90,7 +90,7 @@ struct FromMemrefConverter
     if (unrankedInput && isa<triton::PointerType, ptr::PtrType>(outType)) {
       // from_memref only takes ranked memref, cast the unranked memref to
       // ranked memref first.
-      auto memSpace = tptr::DefaultMemorySpaceAttr::get(rewriter.getContext());
+      auto memSpace = ptr::GenericSpaceAttr::get(rewriter.getContext());
       Value rankedMemref = memref::CastOp::create(
           rewriter, op.getLoc(),
           MemRefType::get({1}, unrankedInput.getElementType()), input);
@@ -132,11 +132,11 @@ struct ToMemrefConverter : public OpRewritePattern<UnrealizedConversionCastOp> {
       // the resulting memref back to unranked
       auto elemType = outUnrankedMemrefType.getElementType();
       mlir::Attribute memSpace =
-          tptr::DefaultMemorySpaceAttr::get(rewriter.getContext());
+          ptr::GenericSpaceAttr::get(rewriter.getContext());
       if (auto ptrType = dyn_cast<ptr::PtrType>(inType)) {
         memSpace = ptrType.getMemorySpace();
       }
-      Value ptrToMemref = ptr::FromPtrOp::create(
+      Value ptrToMemref = tptr::FromPtrOp::create(
           rewriter, op->getLoc(),
           MemRefType::get({1}, elemType, MemRefLayoutAttrInterface{}, memSpace),
           input);

@@ -18,13 +18,15 @@ module {
 }
 
 // CHECK-LABEL:  func.func @reduce_kernel_2d_0d
-// CHECK-SAME:   ([[PARAM_0_:%.+]]: memref<*xf32> {tt.divisibility = 16 : i32}, [[PARAM_1_:%.+]]: i32, [[PARAM_2_:%.+]]: i32, [[PARAM_3_:%.+]]: i32, [[PARAM_4_:%.+]]: i32, [[PARAM_5_:%.+]]: i32, [[PARAM_6_:%.+]]: i32) {
+// CHECK-SAME:   ([[PARAM_0_:%.+]]: !ptr.ptr<#ptr.generic_space> {tt.divisibility = 16 : i32}, [[PARAM_1_:%.+]]: i32, [[PARAM_2_:%.+]]: i32, [[PARAM_3_:%.+]]: i32, [[PARAM_4_:%.+]]: i32, [[PARAM_5_:%.+]]: i32, [[PARAM_6_:%.+]]: i32) {
+// CHECK-DAG:       [[PARAM_0__TTPTR:%.+]] = tptr.from_ptr [[PARAM_0_]] : <#ptr.generic_space> -> memref<1xf32, #ptr.generic_space>
+// CHECK-DAG:       [[PARAM_0__MEMREF:%.+]] = memref.memory_space_cast [[PARAM_0__TTPTR]] : memref<1xf32, #ptr.generic_space> to memref<1xf32>
+// CHECK-DAG:       [[VAR_reinterpret_cast_:%.+]] = memref.reinterpret_cast [[PARAM_0__MEMREF]] to offset: [0], sizes: [1], strides: [1] : memref<1xf32> to memref<1xf32, strided<[1], offset: ?>>
 // CHECK-DAG:       %[[CST_0_:.+]] = arith.constant 0 : index
 // CHECK-DAG:       [[CST_1_:%.+]] = arith.constant 1 : index
 // CHECK-DAG:       [[CST_1_1_:%.+]] = arith.constant 1 : i32
 // CHECK-DAG:       [[CST_0_1_:%.+]] = arith.constant 0 : i32
 // CHECK-DAG:       [[CST_8_:%.+]] = arith.constant 8 : i32
-// CHECK-DAG:       [[VAR_reinterpret_cast_:%.+]] = memref.reinterpret_cast [[PARAM_0_]] to offset: [0], sizes: [1], strides: [1] : memref<*xf32> to memref<1xf32, strided<[1], offset: ?>>
 // CHECK-NOT: separator of consecutive DAGs
 // CHECK-DAG:       [[VAR_0_:%.+]]:2 = scf.for [[VAR_arg7_:%.+]] = [[CST_0_1_]] to [[CST_8_]] step [[CST_1_1_]] iter_args([[VAR_arg8_:%.+]] = [[VAR_reinterpret_cast_]], [[VAR_arg9_:%.+]] = %[[CST_0_]]) -> (memref<1xf32, strided<[1], offset: ?>>, index)  : i32 {
 // CHECK-DAG:         [[VAR_1_:%.+]] = arith.sitofp [[VAR_arg7_]] : i32 to f32

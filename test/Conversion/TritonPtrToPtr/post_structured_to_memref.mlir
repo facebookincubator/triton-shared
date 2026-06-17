@@ -1,4 +1,4 @@
-// RUN: triton-shared-opt --triton-ptr-to-memref %s | FileCheck %s
+// RUN: triton-shared-opt --triton-ptr-to-ptr %s | FileCheck %s
 
 module {
   func.func public @add_kernel_01234(%arg0: !tt.ptr<f32>, %arg1: !tt.ptr<f32>, %arg2: !tt.ptr<f32>, %arg3: i32) {
@@ -35,7 +35,7 @@ module {
   }
 }
 
-// CHECK:   func.func public @add_kernel_01234(%arg0: memref<*xf32>, %arg1: memref<*xf32>, %arg2: memref<*xf32>, %arg3: i32)
-// CHECK-NOT: builtin.unrealized_conversion_cast %arg2 : memref<*xf32> to !tt.ptr<f32>
-// CHECK-NOT: builtin.unrealized_conversion_cast %arg1 : memref<*xf32> to !tt.ptr<f32>
-// CHECK-NOT: builtin.unrealized_conversion_cast %arg0 : memref<*xf32> to !tt.ptr<f32>
+// CHECK:   func.func public @add_kernel_01234(%arg0: !ptr.ptr<#ptr.generic_space>, %arg1: !ptr.ptr<#ptr.generic_space>, %arg2: !ptr.ptr<#ptr.generic_space>, %arg3: i32)
+// CHECK-DAG: builtin.unrealized_conversion_cast %arg2 : !ptr.ptr<#ptr.generic_space> to !tt.ptr<f32>
+// CHECK-DAG: builtin.unrealized_conversion_cast %arg1 : !ptr.ptr<#ptr.generic_space> to !tt.ptr<f32>
+// CHECK-DAG: builtin.unrealized_conversion_cast %arg0 : !ptr.ptr<#ptr.generic_space> to !tt.ptr<f32>

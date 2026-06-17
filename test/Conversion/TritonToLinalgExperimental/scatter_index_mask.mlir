@@ -2,7 +2,7 @@
 
 // Make sure scf.if was created for mask.
 // CHECK-LABLE: tt.func public @scatter_row_index_mask_kernel
-// CHECK: %[[LOOP_COUNT:.*]] = arith.constant 32 : index
+// CHECK-DAG: %[[LOOP_COUNT:.*]] = arith.constant 32 : index
 // CHECK: %{{.*}} = arith.maxsi %{{.*}}, %{{.*}} : index
 // CHECK: %[[MIN:.*]] = arith.minsi %{{.*}}, %[[LOOP_COUNT]] : index
 // CHECK:    scf.for %[[IV:.*]] = %{{.*}} to %[[MIN]] step %{{.*}} {
@@ -46,7 +46,7 @@
 
 // Make sure loop count was changed for imm mask.
 // CHECK-LABLE: tt.func public @scatter_row_imm_index_mask_kernel
-// CHECK: %[[LOOP_COUNT:.*]] = arith.constant 16 : index
+// CHECK-DAG: %[[LOOP_COUNT:.*]] = arith.constant 16 : index
 // CHECK:    scf.for %[[IV:.*]] = %{{.*}} to %[[LOOP_COUNT]] step %{{.*}} {
 // CHECK-NOT:      arith.cmpi slt
 // CHECK-NOT:      scf.if
@@ -89,7 +89,7 @@
 
 // Make sure loop count was not changed for out of bound imm mask.
 // CHECK-LABLE: tt.func public @scatter_row_out_index_mask_kernel
-// CHECK: %[[LOOP_COUNT:.*]] = arith.constant 32 : index
+// CHECK-DAG: %[[LOOP_COUNT:.*]] = arith.constant 32 : index
 // CHECK:    scf.for %[[IV:.*]] = %{{.*}} to %[[LOOP_COUNT]] step %{{.*}} {
 // CHECK-NOT:      arith.cmpi slt
 // CHECK-NOT:      scf.if

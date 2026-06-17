@@ -52,13 +52,34 @@ module {
 
 // CHECK-DAG:   [[MAP_0_:#.+]] = affine_map<(d0, d1) -> (d0, d1)>
 // CHECK-LABEL:  func.func @kernel
-// CHECK-SAME:   ([[PARAM_0_:%.+]]: memref<*xf32>, [[PARAM_1_:%.+]]: memref<*xi32>, [[PARAM_2_:%.+]]: memref<*xf16>, [[PARAM_3_:%.+]]: memref<*xbf16>, [[PARAM_4_:%.+]]: memref<*xf32>, [[PARAM_5_:%.+]]: memref<*xf32>, [[PARAM_6_:%.+]]: memref<*xf32>, [[PARAM_7_:%.+]]: memref<*xf32>, [[PARAM_8_:%.+]]: i32, [[PARAM_9_:%.+]]: i32, [[PARAM_10_:%.+]]: i32, [[PARAM_11_:%.+]]: i32, [[PARAM_12_:%.+]]: i32, [[PARAM_13_:%.+]]: i32) {
+// CHECK-SAME:   ([[PARAM_0_:%.+]]: !ptr.ptr<#ptr.generic_space>, [[PARAM_1_:%.+]]: !ptr.ptr<#ptr.generic_space>, [[PARAM_2_:%.+]]: !ptr.ptr<#ptr.generic_space>, [[PARAM_3_:%.+]]: !ptr.ptr<#ptr.generic_space>, [[PARAM_4_:%.+]]: !ptr.ptr<#ptr.generic_space>, [[PARAM_5_:%.+]]: !ptr.ptr<#ptr.generic_space>, [[PARAM_6_:%.+]]: !ptr.ptr<#ptr.generic_space>, [[PARAM_7_:%.+]]: !ptr.ptr<#ptr.generic_space>, [[PARAM_8_:%.+]]: i32, [[PARAM_9_:%.+]]: i32, [[PARAM_10_:%.+]]: i32, [[PARAM_11_:%.+]]: i32, [[PARAM_12_:%.+]]: i32, [[PARAM_13_:%.+]]: i32) {
+// CHECK-DAG:       [[PARAM_0__TTPTR:%.+]] = tptr.from_ptr [[PARAM_0_]] : <#ptr.generic_space> -> memref<1xf32, #ptr.generic_space>
+// CHECK-DAG:       [[PARAM_0__MEMREF:%.+]] = memref.memory_space_cast [[PARAM_0__TTPTR]] : memref<1xf32, #ptr.generic_space> to memref<1xf32>
+// CHECK-DAG:       [[PARAM_1__TTPTR:%.+]] = tptr.from_ptr [[PARAM_1_]] : <#ptr.generic_space> -> memref<1xi32, #ptr.generic_space>
+// CHECK-DAG:       [[PARAM_1__MEMREF:%.+]] = memref.memory_space_cast [[PARAM_1__TTPTR]] : memref<1xi32, #ptr.generic_space> to memref<1xi32>
+// CHECK-DAG:       [[PARAM_2__TTPTR:%.+]] = tptr.from_ptr [[PARAM_2_]] : <#ptr.generic_space> -> memref<1xf16, #ptr.generic_space>
+// CHECK-DAG:       [[PARAM_2__MEMREF:%.+]] = memref.memory_space_cast [[PARAM_2__TTPTR]] : memref<1xf16, #ptr.generic_space> to memref<1xf16>
+// CHECK-DAG:       [[PARAM_3__TTPTR:%.+]] = tptr.from_ptr [[PARAM_3_]] : <#ptr.generic_space> -> memref<1xbf16, #ptr.generic_space>
+// CHECK-DAG:       [[PARAM_3__MEMREF:%.+]] = memref.memory_space_cast [[PARAM_3__TTPTR]] : memref<1xbf16, #ptr.generic_space> to memref<1xbf16>
+// CHECK-DAG:       [[PARAM_4__TTPTR:%.+]] = tptr.from_ptr [[PARAM_4_]] : <#ptr.generic_space> -> memref<1xf32, #ptr.generic_space>
+// CHECK-DAG:       [[PARAM_4__MEMREF:%.+]] = memref.memory_space_cast [[PARAM_4__TTPTR]] : memref<1xf32, #ptr.generic_space> to memref<1xf32>
+// CHECK-DAG:       [[PARAM_5__TTPTR:%.+]] = tptr.from_ptr [[PARAM_5_]] : <#ptr.generic_space> -> memref<1xf32, #ptr.generic_space>
+// CHECK-DAG:       [[PARAM_5__MEMREF:%.+]] = memref.memory_space_cast [[PARAM_5__TTPTR]] : memref<1xf32, #ptr.generic_space> to memref<1xf32>
+// CHECK-DAG:       [[PARAM_6__TTPTR:%.+]] = tptr.from_ptr [[PARAM_6_]] : <#ptr.generic_space> -> memref<1xf32, #ptr.generic_space>
+// CHECK-DAG:       [[PARAM_6__MEMREF:%.+]] = memref.memory_space_cast [[PARAM_6__TTPTR]] : memref<1xf32, #ptr.generic_space> to memref<1xf32>
+// CHECK-DAG:       [[PARAM_7__TTPTR:%.+]] = tptr.from_ptr [[PARAM_7_]] : <#ptr.generic_space> -> memref<1xf32, #ptr.generic_space>
+// CHECK-DAG:       [[PARAM_7__MEMREF:%.+]] = memref.memory_space_cast [[PARAM_7__TTPTR]] : memref<1xf32, #ptr.generic_space> to memref<1xf32>
+// CHECK-DAG:           [[VAR_cast_3_:%.+]] = memref.reinterpret_cast [[PARAM_3__MEMREF]] to offset: [0], sizes: [1], strides: [1] : memref<1xbf16> to memref<?xbf16>
+// CHECK-DAG:           [[VAR_cast_4_:%.+]] = memref.reinterpret_cast [[PARAM_4__MEMREF]] to offset: [0], sizes: [1], strides: [1] : memref<1xf32> to memref<?xf32>
+// CHECK-DAG:           [[VAR_cast_5_:%.+]] = memref.reinterpret_cast [[PARAM_5__MEMREF]] to offset: [0], sizes: [1], strides: [1] : memref<1xf32> to memref<?xf32>
+// CHECK-DAG:           [[VAR_cast_6_:%.+]] = memref.reinterpret_cast [[PARAM_6__MEMREF]] to offset: [0], sizes: [1], strides: [1] : memref<1xf32> to memref<?xf32>
+// CHECK-DAG:           [[VAR_cast_7_:%.+]] = memref.reinterpret_cast [[PARAM_7__MEMREF]] to offset: [0], sizes: [1], strides: [1] : memref<1xf32> to memref<?xf32>
 // CHECK-DAG:       [[CST_0_:%.+]] = arith.constant 0 : i32
 // CHECK-DAG:       [[VAR_empty_offsets_:%.+]] = tensor.empty() : tensor<128x128xi32>
 // CHECK-DAG:       [[VAR_zero_offsets_:%.+]] = linalg.fill ins([[CST_0_]] : i32) outs([[VAR_empty_offsets_]] : tensor<128x128xi32>) -> tensor<128x128xi32>
-// CHECK-DAG:       [[VAR_reinterpret_cast_:%.+]] = memref.reinterpret_cast [[PARAM_0_]] to offset: [0], sizes: [128, 128], strides: [1, 1] : memref<*xf32> to memref<128x128xf32, strided<[1, 1]>>
-// CHECK-DAG:       [[VAR_reinterpret_cast_0_:%.+]] = memref.reinterpret_cast [[PARAM_1_]] to offset: [0], sizes: [128, 128], strides: [1, 1] : memref<*xi32> to memref<128x128xi32, strided<[1, 1]>>
-// CHECK-DAG:       [[VAR_reinterpret_cast_1_:%.+]] = memref.reinterpret_cast [[PARAM_2_]] to offset: [0], sizes: [128, 128], strides: [1, 1] : memref<*xf16> to memref<128x128xf16, strided<[1, 1]>>
+// CHECK-DAG:       [[VAR_reinterpret_cast_:%.+]] = memref.reinterpret_cast [[PARAM_0__MEMREF]] to offset: [0], sizes: [128, 128], strides: [1, 1] : memref<1xf32> to memref<128x128xf32, strided<[1, 1]>>
+// CHECK-DAG:       [[VAR_reinterpret_cast_0_:%.+]] = memref.reinterpret_cast [[PARAM_1__MEMREF]] to offset: [0], sizes: [128, 128], strides: [1, 1] : memref<1xi32> to memref<128x128xi32, strided<[1, 1]>>
+// CHECK-DAG:       [[VAR_reinterpret_cast_1_:%.+]] = memref.reinterpret_cast [[PARAM_2__MEMREF]] to offset: [0], sizes: [128, 128], strides: [1, 1] : memref<1xf16> to memref<128x128xf16, strided<[1, 1]>>
 // CHECK-DAG:       [[RES_:%.+]] = memref.alloc() : memref<128x128xf32>
 // CHECK:           memref.copy [[VAR_reinterpret_cast_]], [[RES_]] : memref<128x128xf32, strided<[1, 1]>> to memref<128x128xf32>
 // CHECK-DAG:       [[VAR_0_:%.+]] = bufferization.to_tensor [[RES_]] restrict writable : memref<128x128xf32>
@@ -95,35 +116,30 @@ module {
 // CHECK:             [[VAR_10_4_:%.+]] = math.sqrt [[IN_8_]] : f32
 // CHECK:             linalg.yield [[VAR_10_4_]] : f32
 // CHECK:           } -> tensor<128x128xf32>
-// CHECK:           [[VAR_cast_3_:%.+]] = memref.cast [[PARAM_3_]] : memref<*xbf16> to memref<?xbf16>
 // CHECK:           linalg.generic {indexing_maps = [#map, #map], iterator_types = ["parallel", "parallel"]} ins([[VAR_zero_offsets_]], [[VAR_4_]] : tensor<128x128xi32>, tensor<128x128xbf16>) {
 // CHECK:           ^bb0([[IN_11_:%.+]]: i32, [[IN_12_:%.+]]: bf16):
 // CHECK:             [[VAR_11_:%.+]] = arith.index_cast [[IN_11_]] : i32 to index
 // CHECK:             memref.store [[IN_12_]], [[VAR_cast_3_]]{{.}}[[VAR_11_]]{{.}} : memref<?xbf16>
 // CHECK:             linalg.yield
 // CHECK:           }
-// CHECK:           [[VAR_cast_4_:%.+]] = memref.cast [[PARAM_4_]] : memref<*xf32> to memref<?xf32>
 // CHECK:           linalg.generic {indexing_maps = [#map, #map], iterator_types = ["parallel", "parallel"]} ins([[VAR_zero_offsets_]], [[VAR_5_]] : tensor<128x128xi32>, tensor<128x128xf32>) {
 // CHECK:           ^bb0([[IN_13_:%.+]]: i32, [[IN_14_:%.+]]: f32):
 // CHECK:             [[VAR_12_:%.+]] = arith.index_cast [[IN_13_]] : i32 to index
 // CHECK:             memref.store [[IN_14_]], [[VAR_cast_4_]]{{.}}[[VAR_12_]]{{.}} : memref<?xf32>
 // CHECK:             linalg.yield
 // CHECK:           }
-// CHECK:           [[VAR_cast_5_:%.+]] = memref.cast [[PARAM_5_]] : memref<*xf32> to memref<?xf32>
 // CHECK:           linalg.generic {indexing_maps = [#map, #map], iterator_types = ["parallel", "parallel"]} ins([[VAR_zero_offsets_]], [[VAR_7_]] : tensor<128x128xi32>, tensor<128x128xf32>) {
 // CHECK:           ^bb0([[IN_15_:%.+]]: i32, [[IN_16_:%.+]]: f32):
 // CHECK:             [[VAR_13_:%.+]] = arith.index_cast [[IN_15_]] : i32 to index
 // CHECK:             memref.store [[IN_16_]], [[VAR_cast_5_]]{{.}}[[VAR_13_]]{{.}} : memref<?xf32>
 // CHECK:             linalg.yield
 // CHECK:           }
-// CHECK:           [[VAR_cast_6_:%.+]] = memref.cast [[PARAM_6_]] : memref<*xf32> to memref<?xf32>
 // CHECK:           linalg.generic {indexing_maps = [#map, #map], iterator_types = ["parallel", "parallel"]} ins([[VAR_zero_offsets_]], [[VAR_8_]] : tensor<128x128xi32>, tensor<128x128xf32>) {
 // CHECK:           ^bb0([[IN_17_:%.+]]: i32, [[IN_18_:%.+]]: f32):
 // CHECK:             [[VAR_14_:%.+]] = arith.index_cast [[IN_17_]] : i32 to index
 // CHECK:             memref.store [[IN_18_]], [[VAR_cast_6_]]{{.}}[[VAR_14_]]{{.}} : memref<?xf32>
 // CHECK:             linalg.yield
 // CHECK:           }
-// CHECK:           [[VAR_cast_7_:%.+]] = memref.cast [[PARAM_7_]] : memref<*xf32> to memref<?xf32>
 // CHECK:           linalg.generic {indexing_maps = [#map, #map], iterator_types = ["parallel", "parallel"]} ins([[VAR_zero_offsets_]], [[VAR_9_]] : tensor<128x128xi32>, tensor<128x128xf32>) {
 // CHECK:           ^bb0([[IN_19_:%.+]]: i32, [[IN_20_:%.+]]: f32):
 // CHECK:             [[VAR_15_:%.+]] = arith.index_cast [[IN_19_]] : i32 to index

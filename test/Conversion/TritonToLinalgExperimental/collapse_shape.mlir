@@ -9,7 +9,7 @@
 
 module {
 // CHECK-LABEL:   func.func @fill() -> tensor<1x1x1x1x1x2x1xi32> {
-// CHECK:           %[[VAL_0:.*]] = arith.constant 1 : i32
+// CHECK-DAG:           %[[VAL_0:.*]] = arith.constant 1 : i32
 // CHECK:           %[[VAL_1:.*]] = tensor.empty() : tensor<1x1x1x1x1x2x1xi32>
 // CHECK:           %[[VAL_2:.*]] = tensor.collapse_shape %[[VAL_1]] {{\[\[}}0, 1, 2, 3, 4, 5, 6]] : tensor<1x1x1x1x1x2x1xi32> into tensor<2xi32>
 // CHECK:           %[[VAL_3:.*]] = linalg.fill ins(%[[VAL_0]] : i32) outs(%[[VAL_2]] : tensor<2xi32>) -> tensor<2xi32>
@@ -18,7 +18,7 @@ module {
 // CHECK:         }
 
 // CHECK-LABEL:   func.func @fill2() -> memref<32x32xf32> {
-// CHECK:           %[[VAL_0:.*]] = arith.constant 0xFF800000 : f32
+// CHECK-DAG:           %[[VAL_0:.*]] = arith.constant 0xFF800000 : f32
 // CHECK:           %[[VAL_1:.*]] = memref.alloc() : memref<32x32xf32>
 // CHECK:           %[[VAL_2:.*]] = memref.collapse_shape %[[VAL_1]] {{\[\[}}0, 1]] : memref<32x32xf32> into memref<1024xf32>
 // CHECK:           linalg.fill ins(%[[VAL_0]] : f32) outs(%[[VAL_2]] : memref<1024xf32>)

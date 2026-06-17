@@ -122,10 +122,10 @@ def _generate_launcher(constants, signature, kernel_name):
     arg_decls = ', '.join(f"{_ty_to_cpp(ty)} arg{i}" for i, ty in signature.items())
     args_list = ', ' + ', '.join(f"&_arg{i}" for i, ty in signature.items()) if len(signature) > 0 else ''
 
-    kernel_arg_decls = ', '.join(_ty_to_cpp(ty) if ty[0] != "*" else "int64_t, void*" for i, ty in signature.items() if ty != "constexpr")
+    kernel_arg_decls = ', '.join(_ty_to_cpp(ty) if ty[0] != "*" else "void*" for i, ty in signature.items() if ty != "constexpr")
     kernel_arg_decls += ', ' if kernel_arg_decls else ''
 
-    kernel_parameters = ', '.join(f"static_cast<{_ty_to_cpp(ty)}>(arg{i})" if ty[0] != "*" else f"0, &ptr_arg{i}" for i, ty in signature.items() if ty != "constexpr")
+    kernel_parameters = ', '.join(f"static_cast<{_ty_to_cpp(ty)}>(arg{i})" if ty[0] != "*" else f"arg{i}" for i, ty in signature.items() if ty != "constexpr")
     kernel_parameters += ', ' if kernel_parameters else ''
 
     return f"""
@@ -152,7 +152,6 @@ static void _launch(int gridX, int gridY, int gridZ, {arg_decls}) {{
       for(int y = 0; y < gridY; y++) {{
         for(int z = 0; z < gridZ; z++) {{
           // Use some random type "char" here.
-          {' '.join(f'StridedMemRefType<char, 0> ptr_arg{i} = {{static_cast<char *>(arg{i}), static_cast<char *>(arg{i}), 0}};' for i, ty in signature.items() if i not in constants and ty[0] == "*")}
           {kernel_name}({kernel_parameters}
                         gridX, gridY, gridZ, x, y, z);
         }}

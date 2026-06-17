@@ -15,10 +15,10 @@ module {
 // CHECK-SAME:                                           %[[VAL_2:[0-9]+|[a-zA-Z$._-][a-zA-Z0-9$._-]*]]: index) -> tensor<4x4xf32> {
 // CHECK:           %[[VAL_3:.*]] = builtin.unrealized_conversion_cast %[[VAL_0]] : !tt.ptr<f32> to memref<*xf32>
 // CHECK:           %[[VAL_4:.*]] = arith.muli %[[VAL_1]], %[[VAL_2]] : index
-// CHECK:           %[[VAL_5:.*]] = arith.constant 0 : index
-// CHECK:           %[[VAL_6:.*]] = arith.constant 4 : index
-// CHECK:           %[[VAL_7:.*]] = arith.constant 4 : index
-// CHECK:           %[[VAL_8:.*]] = arith.constant 1 : index
+// CHECK-DAG:           %[[VAL_5:.*]] = arith.constant 0 : index
+// CHECK-DAG:           %[[VAL_6:.*]] = arith.constant 4 : index
+// CHECK-DAG:           %[[VAL_7:.*]] = arith.constant 4 : index
+// CHECK-DAG:           %[[VAL_8:.*]] = arith.constant 1 : index
 // CHECK:           %[[VAL_9:.*]] = arith.remsi %[[VAL_5]], %[[VAL_2]] : index
 // CHECK:           %[[VAL_10:.*]] = arith.addi %[[VAL_4]], %[[VAL_9]] : index
 // CHECK:           %[[VAL_11:.*]] = arith.subi %[[VAL_10]], %[[VAL_5]] : index
@@ -29,15 +29,15 @@ module {
 // CHECK:           %[[VAL_16:.*]] = memref.reinterpret_cast %[[VAL_3]] to offset: {{\[}}%[[VAL_9]]], sizes: {{\[}}%[[VAL_15]], %[[VAL_7]]], strides: {{\[}}%[[VAL_2]], %[[VAL_8]]] : memref<*xf32> to memref<?x?xf32, strided<[?, ?], offset: ?>>
 // CHECK:           %[[VAL_17:.*]] = builtin.unrealized_conversion_cast %[[VAL_14]], %[[VAL_16]] : memref<?x?xf32, strided<[?, ?], offset: ?>>, memref<?x?xf32, strided<[?, ?], offset: ?>> to tensor<4x4x!tt.ptr<f32>> {wrap_stacked}
 // CHECK:           %[[VAL_18:.*]] = memref.alloc() : memref<4x4xf32>
-// CHECK:           %[[VAL_19:.*]] = arith.constant 0 : index
-// CHECK:           %[[VAL_20:.*]] = arith.constant 1 : index
-// CHECK:           %[[VAL_21:.*]] = arith.constant 0 : index
+// CHECK-DAG:           %[[VAL_19:.*]] = arith.constant 0 : index
+// CHECK-DAG:           %[[VAL_20:.*]] = arith.constant 1 : index
+// CHECK-DAG:           %[[VAL_21:.*]] = arith.constant 0 : index
 // CHECK:           %[[VAL_22:.*]] = memref.dim %[[VAL_14]], %[[VAL_21]] : memref<?x?xf32, strided<[?, ?], offset: ?>>
-// CHECK:           %[[VAL_23:.*]] = arith.constant 1 : index
+// CHECK-DAG:           %[[VAL_23:.*]] = arith.constant 1 : index
 // CHECK:           %[[VAL_24:.*]] = memref.dim %[[VAL_14]], %[[VAL_23]] : memref<?x?xf32, strided<[?, ?], offset: ?>>
-// CHECK:           %[[VAL_25:.*]] = arith.constant 0 : index
+// CHECK-DAG:           %[[VAL_25:.*]] = arith.constant 0 : index
 // CHECK:           %[[VAL_26:.*]] = memref.dim %[[VAL_16]], %[[VAL_25]] : memref<?x?xf32, strided<[?, ?], offset: ?>>
-// CHECK:           %[[VAL_27:.*]] = arith.constant 1 : index
+// CHECK-DAG:           %[[VAL_27:.*]] = arith.constant 1 : index
 // CHECK:           %[[VAL_28:.*]] = memref.dim %[[VAL_16]], %[[VAL_27]] : memref<?x?xf32, strided<[?, ?], offset: ?>>
 // CHECK:           %[[VAL_29:.*]] = memref.subview %[[VAL_18]]{{\[}}%[[VAL_19]], %[[VAL_19]]] {{\[}}%[[VAL_22]], %[[VAL_24]]] {{\[}}%[[VAL_20]], %[[VAL_20]]] : memref<4x4xf32> to memref<?x?xf32, strided<[?, ?], offset: ?>>
 // CHECK:           %[[VAL_30:.*]] = memref.subview %[[VAL_18]]{{\[}}%[[VAL_22]], %[[VAL_19]]] {{\[}}%[[VAL_26]], %[[VAL_28]]] {{\[}}%[[VAL_20]], %[[VAL_20]]] : memref<4x4xf32> to memref<?x?xf32, strided<[?, ?], offset: ?>>

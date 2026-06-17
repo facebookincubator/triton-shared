@@ -68,7 +68,7 @@ module {
 // CHECK:           } -> tensor<4096x!tt.ptr<f32>>
 // CHECK:           %[[LOAD_0:.*]] = tt.load %[[GENERIC_2]] : tensor<4096x!tt.ptr<f32>>
 // CHECK:           %[[EMPTY_2:.*]] = tensor.empty() : tensor<4096xf32>
-// CHECK:           %[[CUMSUM_0:.*]] = ttx.cumsum {axis = 0 : ui32, operandSegmentSizes = array<i32: 1, 1>} ins(%[[LOAD_0]] : tensor<4096xf32>) outs(%[[EMPTY_2]] : tensor<4096xf32>) -> tensor<4096xf32>
+// CHECK:           %[[CUMSUM_0:.*]]:2 = scf.for
 // CHECK:           %[[SPLAT_1:.*]] = tensor.splat %[[ARG1]] : tensor<4096x!tt.ptr<i32>>
 // CHECK:           %[[GENERIC_3:.*]] = linalg.generic {indexing_maps = [#[[$ATTR_0]], #[[$ATTR_0]], #[[$ATTR_0]]], iterator_types = ["parallel"]} ins(%[[SPLAT_1]], %[[GENERIC_1]] : tensor<4096x!tt.ptr<i32>>, tensor<4096xi32>) outs(%[[SPLAT_1]] : tensor<4096x!tt.ptr<i32>>) {
 // CHECK:           ^bb0(%[[VAL_7:.*]]: !tt.ptr<i32>, %[[VAL_8:.*]]: i32, %[[VAL_9:.*]]: !tt.ptr<i32>):
@@ -76,7 +76,7 @@ module {
 // CHECK:             linalg.yield %[[ADDPTR_1]] : !tt.ptr<i32>
 // CHECK:           } -> tensor<4096x!tt.ptr<i32>>
 // CHECK:           %[[EMPTY_3:.*]] = tensor.empty() : tensor<4096xi32>
-// CHECK:           %[[GENERIC_4:.*]] = linalg.generic {indexing_maps = [#[[$ATTR_0]], #[[$ATTR_0]]], iterator_types = ["parallel"]} ins(%[[CUMSUM_0]] : tensor<4096xf32>) outs(%[[EMPTY_3]] : tensor<4096xi32>) {
+// CHECK:           %[[GENERIC_4:.*]] = linalg.generic {indexing_maps = [#[[$ATTR_0]], #[[$ATTR_0]]], iterator_types = ["parallel"]} ins(%[[CUMSUM_0]]#1 : tensor<4096xf32>) outs(%[[EMPTY_3]] : tensor<4096xi32>) {
 // CHECK:           ^bb0(%[[VAL_10:.*]]: f32, %[[VAL_11:.*]]: i32):
 // CHECK:             %[[FPTOSI_0:.*]] = arith.fptosi %[[VAL_10]] : f32 to i32
 // CHECK:             linalg.yield %[[FPTOSI_0]] : i32

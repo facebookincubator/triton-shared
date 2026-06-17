@@ -31,10 +31,10 @@ module {
 // CHECK:           %[[CONSTANT_0:.*]] = arith.constant 0 : i32
 // CHECK:           %[[CONSTANT_1:.*]] = arith.constant 0 : index
 // CHECK:  linalg.generic
-// CHECK:           ^bb0(%[[VAL_13:.*]]: !ptr.ptr<#tptr.default_memory_space>, %[[VAL_14:.*]]: i1, %[[VAL_15:.*]]: i32):
-// CHECK:             %[[FROM_PTR_1:.*]] = ptr.from_ptr %[[VAL_13]] : <#tptr.default_memory_space> -> memref<1xi32, #tptr.default_memory_space>
+// CHECK:           ^bb0(%[[VAL_13:.*]]: !ptr.ptr<#ptr.generic_space>, %[[VAL_14:.*]]: i1, %[[VAL_15:.*]]: i32):
+// CHECK:             %[[FROM_PTR_1:.*]] = tptr.from_ptr %[[VAL_13]] : <#ptr.generic_space> -> memref<1xi32, #ptr.generic_space>
 // CHECK:             %[[IF_0:.*]] = scf.if %[[VAL_14]] -> (i32) {
-// CHECK:               %[[LOAD_1:.*]] = memref.load %[[FROM_PTR_1]]{{\[}}%[[CONSTANT_1]]] : memref<1xi32, #tptr.default_memory_space>
+// CHECK:               %[[LOAD_1:.*]] = memref.load %[[FROM_PTR_1]]{{\[}}%[[CONSTANT_1]]] : memref<1xi32, #ptr.generic_space>
 // CHECK:               scf.yield %[[LOAD_1]] : i32
 // CHECK:             } else {
 // CHECK:               scf.yield %[[CONSTANT_0]] : i32
@@ -43,10 +43,10 @@ module {
 // CHECK:           } -> tensor<16xi32>
 
 // CHECK:  linalg.generic
-// CHECK:           ^bb0(%[[VAL_31:.*]]: !ptr.ptr<#tptr.default_memory_space>, %[[VAL_32:.*]]: i32, %[[VAL_33:.*]]: i1):
+// CHECK:           ^bb0(%[[VAL_31:.*]]: !ptr.ptr<#ptr.generic_space>, %[[VAL_32:.*]]: i32, %[[VAL_33:.*]]: i1):
 // CHECK:             scf.if %[[VAL_33]] {
-// CHECK:               %[[FROM_PTR_2:.*]] = ptr.from_ptr %[[VAL_31]] : <#tptr.default_memory_space> -> memref<1xi32, #tptr.default_memory_space>
-// CHECK:               memref.store %[[VAL_32]], %[[FROM_PTR_2]]{{\[}}%[[CONSTANT_1]]] : memref<1xi32, #tptr.default_memory_space>
+// CHECK:               %[[FROM_PTR_2:.*]] = tptr.from_ptr %[[VAL_31]] : <#ptr.generic_space> -> memref<1xi32, #ptr.generic_space>
+// CHECK:               memref.store %[[VAL_32]], %[[FROM_PTR_2]]{{\[}}%[[CONSTANT_1]]] : memref<1xi32, #ptr.generic_space>
 // CHECK:             }
 // CHECK:             linalg.yield
 // CHECK:           }

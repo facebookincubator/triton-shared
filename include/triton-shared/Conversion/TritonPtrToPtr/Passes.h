@@ -5,16 +5,16 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef TRITON_PTR_TO_MEMREF_CONVERSION_PASSES_H
-#define TRITON_PTR_TO_MEMREF_CONVERSION_PASSES_H
+#ifndef TRITON_PTR_TO_PTR_CONVERSION_PASSES_H
+#define TRITON_PTR_TO_PTR_CONVERSION_PASSES_H
 
-#include "triton-shared/Conversion/TritonPtrToMemref/TritonPtrToMemref.h"
+#include "triton-shared/Conversion/TritonPtrToPtr/TritonPtrToPtr.h"
 
 namespace mlir {
 namespace triton {
 
 #define GEN_PASS_REGISTRATION
-#include "triton-shared/Conversion/TritonPtrToMemref/Passes.h.inc"
+#include "triton-shared/Conversion/TritonPtrToPtr/Passes.h.inc"
 
 } // namespace triton
 } // namespace mlir

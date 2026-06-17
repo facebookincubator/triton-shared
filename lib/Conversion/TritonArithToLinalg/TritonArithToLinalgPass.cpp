@@ -123,6 +123,8 @@ public:
 
     target.addLegalOp<triton::FuncOp, triton::ReturnOp>();
 
+    target.addIllegalOp<triton::HistogramOp>();
+
     target.addDynamicallyLegalDialect<arith::ArithDialect, math::MathDialect>(
         [](Operation *op) {
           // Lower dense constant to linalg.fill

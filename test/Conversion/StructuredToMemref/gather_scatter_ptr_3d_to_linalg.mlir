@@ -5,9 +5,9 @@
 // CHECK: #[[$ATTR_0:.+]] = affine_map<(d0) -> (d0)>
 
 // CHECK-LABEL:   func.func @row_gather3(
-// CHECK-SAME:                           %[[VAL_0:[0-9]+|[a-zA-Z$._-][a-zA-Z0-9$._-]*]]: memref<*xf32>,
-// CHECK-SAME:                           %[[VAL_1:[0-9]+|[a-zA-Z$._-][a-zA-Z0-9$._-]*]]: memref<*xi32>,
-// CHECK-SAME:                           %[[VAL_2:[0-9]+|[a-zA-Z$._-][a-zA-Z0-9$._-]*]]: memref<*xf32>,
+// CHECK-SAME:                           %[[VAL_0:[0-9]+|[a-zA-Z$._-][a-zA-Z0-9$._-]*]]: !ptr.ptr<#ptr.generic_space>,
+// CHECK-SAME:                           %[[VAL_1:[0-9]+|[a-zA-Z$._-][a-zA-Z0-9$._-]*]]: !ptr.ptr<#ptr.generic_space>,
+// CHECK-SAME:                           %[[VAL_2:[0-9]+|[a-zA-Z$._-][a-zA-Z0-9$._-]*]]: !ptr.ptr<#ptr.generic_space>,
 // CHECK-SAME:                           %[[VAL_3:[0-9]+|[a-zA-Z$._-][a-zA-Z0-9$._-]*]]: i32,
 // CHECK-SAME:                           %[[VAL_4:[0-9]+|[a-zA-Z$._-][a-zA-Z0-9$._-]*]]: i32,
 // CHECK-SAME:                           %[[VAL_5:[0-9]+|[a-zA-Z$._-][a-zA-Z0-9$._-]*]]: i32,
@@ -17,10 +17,16 @@
 // CHECK-SAME:                           %[[VAL_9:[0-9]+|[a-zA-Z$._-][a-zA-Z0-9$._-]*]]: i32,
 // CHECK-SAME:                           %[[VAL_10:[0-9]+|[a-zA-Z$._-][a-zA-Z0-9$._-]*]]: i32,
 // CHECK-SAME:                           %[[VAL_11:[0-9]+|[a-zA-Z$._-][a-zA-Z0-9$._-]*]]: i32) {
-// CHECK:           %[[VAL_12:.*]] = arith.constant 1 : index
-// CHECK:           %[[VAL_13:.*]] = arith.constant 32 : index
-// CHECK:           %[[VAL_14:.*]] = arith.constant 0 : index
-// CHECK:           %[[VAL_15:.*]] = memref.reinterpret_cast %[[VAL_1]] to offset: [0], sizes: [32], strides: [1] : memref<*xi32> to memref<32xi32, strided<[1]>>
+// CHECK-DAG:       [[VAL_0_TTPTR:%.+]] = tptr.from_ptr %[[VAL_0]] : <#ptr.generic_space> -> memref<1xf32, #ptr.generic_space>
+// CHECK-DAG:       [[VAL_0_MEMREF:%.+]] = memref.memory_space_cast [[VAL_0_TTPTR]] : memref<1xf32, #ptr.generic_space> to memref<1xf32>
+// CHECK-DAG:       [[VAL_1_TTPTR:%.+]] = tptr.from_ptr %[[VAL_1]] : <#ptr.generic_space> -> memref<1xi32, #ptr.generic_space>
+// CHECK-DAG:       [[VAL_1_MEMREF:%.+]] = memref.memory_space_cast [[VAL_1_TTPTR]] : memref<1xi32, #ptr.generic_space> to memref<1xi32>
+// CHECK-DAG:       [[VAL_2_TTPTR:%.+]] = tptr.from_ptr %[[VAL_2]] : <#ptr.generic_space> -> memref<1xf32, #ptr.generic_space>
+// CHECK-DAG:       [[VAL_2_MEMREF:%.+]] = memref.memory_space_cast [[VAL_2_TTPTR]] : memref<1xf32, #ptr.generic_space> to memref<1xf32>
+// CHECK-DAG:           %[[VAL_12:.*]] = arith.constant 1 : index
+// CHECK-DAG:           %[[VAL_13:.*]] = arith.constant 32 : index
+// CHECK-DAG:           %[[VAL_14:.*]] = arith.constant 0 : index
+// CHECK:           %[[VAL_15:.*]] = memref.reinterpret_cast [[VAL_1_MEMREF]] to offset: [0], sizes: [32], strides: [1] : memref<1xi32> to memref<32xi32, strided<[1]>>
 // CHECK:           %[[VAL_16:.*]] = memref.alloc() : memref<32xi32>
 // CHECK:           memref.copy %[[VAL_15]], %[[VAL_16]] : memref<32xi32, strided<[1]>> to memref<32xi32>
 // CHECK:           %[[VAL_17:.*]] = bufferization.to_tensor %[[VAL_16]] restrict writable : memref<32xi32> to tensor<32xi32>
@@ -37,7 +43,7 @@
 // CHECK:           scf.for %[[VAL_28:.*]] = %[[VAL_14]] to %[[VAL_13]] step %[[VAL_12]] {
 // CHECK:             %[[VAL_29:.*]] = tensor.extract %[[VAL_21]]{{\[}}%[[VAL_28]]] : tensor<32xi32>
 // CHECK:             %[[VAL_30:.*]] = arith.index_cast %[[VAL_29]] : i32 to index
-// CHECK:             %[[VAL_31:.*]] = memref.reinterpret_cast %[[VAL_0]] to offset: {{\[}}%[[VAL_30]]], sizes: [32, 1, 32], strides: {{\[}}%[[VAL_18]], 1, %[[VAL_26]]] : memref<*xf32> to memref<32x1x32xf32, strided<[?, 1, ?], offset: ?>>
+// CHECK:             %[[VAL_31:.*]] = memref.reinterpret_cast [[VAL_0_MEMREF]] to offset: {{\[}}%[[VAL_30]]], sizes: [32, 1, 32], strides: {{\[}}%[[VAL_18]], 1, %[[VAL_26]]] : memref<1xf32> to memref<32x1x32xf32, strided<[?, 1, ?], offset: ?>>
 // CHECK:             %[[VAL_32:.*]] = memref.subview %[[VAL_27]][0, %[[VAL_28]], 0] [32, 1, 32] [1, 1, 1] : memref<32x32x32xf32> to memref<32x1x32xf32, strided<[1024, 32, 1], offset: ?>>
 // CHECK:             memref.copy %[[VAL_31]], %[[VAL_32]] : memref<32x1x32xf32, strided<[?, 1, ?], offset: ?>> to memref<32x1x32xf32, strided<[1024, 32, 1], offset: ?>>
 // CHECK:           }
@@ -46,7 +52,7 @@
 // CHECK:             %[[VAL_35:.*]] = tensor.extract %[[VAL_21]]{{\[}}%[[VAL_34]]] : tensor<32xi32>
 // CHECK:             %[[VAL_36:.*]] = arith.index_cast %[[VAL_35]] : i32 to index
 // CHECK:             %[[VAL_37:.*]] = tensor.extract_slice %[[VAL_33]][0, %[[VAL_34]], 0] [32, 1, 32] [1, 1, 1] : tensor<32x32x32xf32> to tensor<32x1x32xf32>
-// CHECK:             %[[VAL_38:.*]] = memref.reinterpret_cast %[[VAL_2]] to offset: {{\[}}%[[VAL_36]]], sizes: [32, 1, 32], strides: {{\[}}%[[VAL_18]], 1, %[[VAL_26]]] : memref<*xf32> to memref<32x1x32xf32, strided<[?, 1, ?], offset: ?>>
+// CHECK:             %[[VAL_38:.*]] = memref.reinterpret_cast [[VAL_2_MEMREF]] to offset: {{\[}}%[[VAL_36]]], sizes: [32, 1, 32], strides: {{\[}}%[[VAL_18]], 1, %[[VAL_26]]] : memref<1xf32> to memref<32x1x32xf32, strided<[?, 1, ?], offset: ?>>
 // CHECK:             bufferization.materialize_in_destination %[[VAL_37]] in writable %[[VAL_38]] : (tensor<32x1x32xf32>, memref<32x1x32xf32, strided<[?, 1, ?], offset: ?>>) -> ()
 // CHECK:           }
 // CHECK:           return

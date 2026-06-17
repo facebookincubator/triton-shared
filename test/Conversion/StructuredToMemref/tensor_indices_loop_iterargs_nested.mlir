@@ -40,7 +40,11 @@ module {
 }
 
 // CHECK-LABEL:  func.func @tensor_indices_nested
-// CHECK-SAME:   ([[PARAM_0_:%.+]]: memref<*xf32>, [[PARAM_1_:%.+]]: memref<*xf32>, [[PARAM_2_:%.+]]: i32, [[PARAM_3_:%.+]]: i32, [[PARAM_4_:%.+]]: i32, [[PARAM_5_:%.+]]: i32, [[PARAM_6_:%.+]]: i32, [[PARAM_7_:%.+]]: i32) {
+// CHECK-SAME:   ([[PARAM_0_:%.+]]: !ptr.ptr<#ptr.generic_space>, [[PARAM_1_:%.+]]: !ptr.ptr<#ptr.generic_space>, [[PARAM_2_:%.+]]: i32, [[PARAM_3_:%.+]]: i32, [[PARAM_4_:%.+]]: i32, [[PARAM_5_:%.+]]: i32, [[PARAM_6_:%.+]]: i32, [[PARAM_7_:%.+]]: i32) {
+// CHECK-DAG:       [[PARAM_0__TTPTR:%.+]] = tptr.from_ptr [[PARAM_0_]] : <#ptr.generic_space> -> memref<1xf32, #ptr.generic_space>
+// CHECK-DAG:       [[PARAM_0__MEMREF:%.+]] = memref.memory_space_cast [[PARAM_0__TTPTR]] : memref<1xf32, #ptr.generic_space> to memref<1xf32>
+// CHECK-DAG:       [[PARAM_1__TTPTR:%.+]] = tptr.from_ptr [[PARAM_1_]] : <#ptr.generic_space> -> memref<1xf32, #ptr.generic_space>
+// CHECK-DAG:       [[PARAM_1__MEMREF:%.+]] = memref.memory_space_cast [[PARAM_1__TTPTR]] : memref<1xf32, #ptr.generic_space> to memref<1xf32>
 // CHECK-DAG:       [[CST_3_:%.+]] = arith.constant 3 : i32
 // CHECK-DAG:       [[CST_1_:%.+]] = arith.constant 1 : i32
 // CHECK-DAG:       [[CST_0_:%.+]] = arith.constant 0 : index
@@ -52,11 +56,11 @@ module {
 // CHECK-DAG:         [[VAR_1_:%.+]] = arith.muli [[VAR_arg8_]], [[CST_2_]] : i32
 // CHECK:             [[VAR_2_:%.+]] = arith.index_cast [[VAR_1_]] : i32 to index
 // CHECK:             [[VAR_3_:%.+]] = arith.addi [[VAR_arg9_]], [[VAR_2_]] : index
-// CHECK-DAG:         [[VAR_reinterpret_cast_:%.+]] = memref.reinterpret_cast [[PARAM_0_]] to offset: {{.}}[[VAR_3_]]{{.}}, sizes: [4], strides: [1] : memref<*xf32> to memref<4xf32, strided<[1], offset: ?>>
+// CHECK-DAG:         [[VAR_reinterpret_cast_:%.+]] = memref.reinterpret_cast [[PARAM_0__MEMREF]] to offset: {{.}}[[VAR_3_]]{{.}}, sizes: [4], strides: [1] : memref<1xf32> to memref<4xf32, strided<[1], offset: ?>>
 // CHECK-DAG:         [[RES_:%.+]] = memref.alloc() : memref<4xf32>
 // CHECK:             memref.copy [[VAR_reinterpret_cast_]], [[RES_]] : memref<4xf32, strided<[1], offset: ?>> to memref<4xf32>
 // CHECK-DAG:         [[VAR_4_:%.+]] = bufferization.to_tensor [[RES_]] restrict writable : memref<4xf32> to tensor<4xf32>
-// CHECK-DAG:         [[VAR_reinterpret_cast_0_:%.+]] = memref.reinterpret_cast [[PARAM_1_]] to offset: {{.}}[[VAR_arg10_]]{{.}}, sizes: [4], strides: [1] : memref<*xf32> to memref<4xf32, strided<[1], offset: ?>>
+// CHECK-DAG:         [[VAR_reinterpret_cast_0_:%.+]] = memref.reinterpret_cast [[PARAM_1__MEMREF]] to offset: {{.}}[[VAR_arg10_]]{{.}}, sizes: [4], strides: [1] : memref<1xf32> to memref<4xf32, strided<[1], offset: ?>>
 // CHECK:             bufferization.materialize_in_destination [[VAR_4_]] in writable [[VAR_reinterpret_cast_0_]] : (tensor<4xf32>, memref<4xf32, strided<[1], offset: ?>>) -> ()
 // CHECK-DAG:         [[VAR_5_:%.+]] = arith.addi [[VAR_3_]], [[CST_4_]] : index
 // CHECK-DAG:         [[VAR_6_:%.+]] = arith.addi [[VAR_arg10_]], [[CST_4_]] : index
@@ -65,11 +69,11 @@ module {
 // CHECK-DAG:           [[VAR_8_:%.+]] = arith.muli [[VAR_arg11_]], [[CST_3_]] : i32
 // CHECK:               [[VAR_9_:%.+]] = arith.index_cast [[VAR_8_]] : i32 to index
 // CHECK:               [[VAR_10_:%.+]] = arith.addi [[VAR_arg12_]], [[VAR_9_]] : index
-// CHECK-DAG:           [[VAR_reinterpret_cast_1_:%.+]] = memref.reinterpret_cast [[PARAM_0_]] to offset: {{.}}[[VAR_10_]]{{.}}, sizes: [4], strides: [1] : memref<*xf32> to memref<4xf32, strided<[1], offset: ?>>
+// CHECK-DAG:           [[VAR_reinterpret_cast_1_:%.+]] = memref.reinterpret_cast [[PARAM_0__MEMREF]] to offset: {{.}}[[VAR_10_]]{{.}}, sizes: [4], strides: [1] : memref<1xf32> to memref<4xf32, strided<[1], offset: ?>>
 // CHECK-DAG:           [[RES_1_:%.+]] = memref.alloc() : memref<4xf32>
 // CHECK:               memref.copy [[VAR_reinterpret_cast_1_]], [[RES_1_]] : memref<4xf32, strided<[1], offset: ?>> to memref<4xf32>
 // CHECK-DAG:           [[VAR_11_:%.+]] = bufferization.to_tensor [[RES_1_]] restrict writable : memref<4xf32> to tensor<4xf32>
-// CHECK-DAG:           [[VAR_reinterpret_cast_3_:%.+]] = memref.reinterpret_cast [[PARAM_1_]] to offset: {{.}}[[VAR_arg13_]]{{.}}, sizes: [4], strides: [1] : memref<*xf32> to memref<4xf32, strided<[1], offset: ?>>
+// CHECK-DAG:           [[VAR_reinterpret_cast_3_:%.+]] = memref.reinterpret_cast [[PARAM_1__MEMREF]] to offset: {{.}}[[VAR_arg13_]]{{.}}, sizes: [4], strides: [1] : memref<1xf32> to memref<4xf32, strided<[1], offset: ?>>
 // CHECK:               bufferization.materialize_in_destination [[VAR_11_]] in writable [[VAR_reinterpret_cast_3_]] : (tensor<4xf32>, memref<4xf32, strided<[1], offset: ?>>) -> ()
 // CHECK-DAG:           [[VAR_12_:%.+]] = arith.addi [[VAR_10_]], [[CST_4_]] : index
 // CHECK-DAG:           [[VAR_13_:%.+]] = arith.addi [[VAR_arg13_]], [[CST_4_]] : index

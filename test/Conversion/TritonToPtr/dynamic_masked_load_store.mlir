@@ -42,11 +42,11 @@ module {
 // CHECK:             linalg.yield %[[CMPI_0]] : i1
 // CHECK:           } -> tensor<16xi1>
 
-// CHECK:  linalg.generic {indexing_maps = [#map, #map, #map], iterator_types = ["parallel"]} ins(%{{.+}}, [[MASK]] : tensor<16x!ptr.ptr<#tptr.default_memory_space>>, tensor<16xi1>)
-// CHECK:           ^bb0(%[[VAL_18:.*]]: !ptr.ptr<#tptr.default_memory_space>, %[[VAL_19:.*]]: i1, %[[VAL_20:.*]]: i32):
-// CHECK:             %[[FROM_PTR_2:.*]] = ptr.from_ptr %[[VAL_18]] : <#tptr.default_memory_space> -> memref<1xi32, #tptr.default_memory_space>
+// CHECK:  linalg.generic {indexing_maps = [#map, #map, #map], iterator_types = ["parallel"]} ins(%{{.+}}, [[MASK]] : tensor<16x!ptr.ptr<#ptr.generic_space>>, tensor<16xi1>)
+// CHECK:           ^bb0(%[[VAL_18:.*]]: !ptr.ptr<#ptr.generic_space>, %[[VAL_19:.*]]: i1, %[[VAL_20:.*]]: i32):
+// CHECK:             %[[FROM_PTR_2:.*]] = tptr.from_ptr %[[VAL_18]] : <#ptr.generic_space> -> memref<1xi32, #ptr.generic_space>
 // CHECK:             %[[IF_0:.*]] = scf.if %[[VAL_19]] -> (i32) {
-// CHECK:               %[[LOAD_2:.*]] = memref.load %[[FROM_PTR_2]]{{\[}}%[[CONSTANT_0]]] : memref<1xi32, #tptr.default_memory_space>
+// CHECK:               %[[LOAD_2:.*]] = memref.load %[[FROM_PTR_2]]{{\[}}%[[CONSTANT_0]]] : memref<1xi32, #ptr.generic_space>
 // CHECK:               scf.yield %[[LOAD_2]] : i32
 // CHECK:             } else {
 // CHECK:               scf.yield %[[CONSTANT_2]] : i32
@@ -55,10 +55,10 @@ module {
 // CHECK:           } -> tensor<16xi32>
 
 // CHECK:  linalg.generic
-// CHECK:           ^bb0(%[[VAL_36:.*]]: !ptr.ptr<#tptr.default_memory_space>, %[[VAL_37:.*]]: i32, %[[VAL_38:.*]]: i1):
+// CHECK:           ^bb0(%[[VAL_36:.*]]: !ptr.ptr<#ptr.generic_space>, %[[VAL_37:.*]]: i32, %[[VAL_38:.*]]: i1):
 // CHECK:             scf.if %[[VAL_38]] {
-// CHECK:               %[[FROM_PTR_3:.*]] = ptr.from_ptr %[[VAL_36]] : <#tptr.default_memory_space> -> memref<1xi32, #tptr.default_memory_space>
-// CHECK:               memref.store %[[VAL_37]], %[[FROM_PTR_3]]{{\[}}%[[CONSTANT_0]]] : memref<1xi32, #tptr.default_memory_space>
+// CHECK:               %[[FROM_PTR_3:.*]] = tptr.from_ptr %[[VAL_36]] : <#ptr.generic_space> -> memref<1xi32, #ptr.generic_space>
+// CHECK:               memref.store %[[VAL_37]], %[[FROM_PTR_3]]{{\[}}%[[CONSTANT_0]]] : memref<1xi32, #ptr.generic_space>
 // CHECK:             }
 // CHECK:             linalg.yield
 // CHECK:           }

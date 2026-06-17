@@ -13,7 +13,7 @@ module {
 
 // CHECK: module {
 // CHECK:   func.func @_sum_combine__fp32(%arg0: i32, %arg1: i32, %arg2: i32, %arg3: i32, %arg4: i32, %arg5: i32) -> f32 {
-// CHECK:     [[CST_:%.+]] = arith.constant 4.200000e+01 : f32
+// CHECK-DAG:     [[CST_:%.+]] = arith.constant 4.200000e+01 : f32
 // CHECK:     return [[CST_]] : f32
 // CHECK:   }
 // CHECK:   func.func @test(%arg0: i32, %arg1: i32, %arg2: i32, %arg3: i32, %arg4: i32, %arg5: i32) -> f32 {

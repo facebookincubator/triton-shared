@@ -1,7 +1,7 @@
-// RUN: triton-shared-opt --triton-ptr-to-memref %s | FileCheck %s
+// RUN: triton-shared-opt --triton-ptr-to-ptr %s | FileCheck %s
 
 module {
-  tt.func public @add_kernel_01234(%arg0: !tt.ptr<f32>, %arg1: !tt.ptr<f32>, %arg2: !tt.ptr<f32>, %arg3: i32) {
+  func.func public @add_kernel_01234(%arg0: !tt.ptr<f32>, %arg1: !tt.ptr<f32>, %arg2: !tt.ptr<f32>, %arg3: i32) {
     %c1024_i32 = arith.constant 1024 : i32
     %0 = tt.get_program_id x : i32
     %1 = arith.muli %0, %c1024_i32 : i32
@@ -20,8 +20,8 @@ module {
     %14 = tt.splat %arg2 : !tt.ptr<f32> -> tensor<1024x!tt.ptr<f32>>
     %15 = tt.addptr %14, %4 : tensor<1024x!tt.ptr<f32>>, tensor<1024xi32>
     tt.store %15, %13, %6 : tensor<1024x!tt.ptr<f32>>
-    tt.return
+    return
   }
 }
 
-// CHECK:   tt.func public @add_kernel_01234(%arg0: memref<*xf32>, %arg1: memref<*xf32>, %arg2: memref<*xf32>, %arg3: i32)
+// CHECK:   func.func public @add_kernel_01234(%arg0: !ptr.ptr<#ptr.generic_space>, %arg1: !ptr.ptr<#ptr.generic_space>, %arg2: !ptr.ptr<#ptr.generic_space>, %arg3: i32)

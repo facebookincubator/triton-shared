@@ -4,12 +4,12 @@
 // CHECK-SAME:                               %[[VAL_0:[0-9]+|[a-zA-Z$._-][a-zA-Z0-9$._-]*]]: !tt.ptr<f32>,
 // CHECK-SAME:                               %[[VAL_1:[0-9]+|[a-zA-Z$._-][a-zA-Z0-9$._-]*]]: !tt.ptr<i32>,
 // CHECK-SAME:                               %[[VAL_2:[0-9]+|[a-zA-Z$._-][a-zA-Z0-9$._-]*]]: !tt.ptr<f32>) attributes {noinline = false} {
-// CHECK:           %[[VAL_3:.*]] = arith.constant 1 : index
-// CHECK:           %[[VAL_4:.*]] = arith.constant 0 : index
-// CHECK:           %[[VAL_5:.*]] = arith.constant dense<5> : tensor<8xi32>
-// CHECK:           %[[VAL_6:.*]] = arith.constant dense<3> : tensor<8xi32>
-// CHECK:           %[[VAL_7:.*]] = arith.constant 8 : index
-// CHECK:           %[[VAL_8:.*]] = arith.constant dense<8> : tensor<8xi32>
+// CHECK-DAG:           %[[VAL_3:.*]] = arith.constant 1 : index
+// CHECK-DAG:           %[[VAL_4:.*]] = arith.constant 0 : index
+// CHECK-DAG:           %[[VAL_5:.*]] = arith.constant dense<5> : tensor<8xi32>
+// CHECK-DAG:           %[[VAL_6:.*]] = arith.constant dense<3> : tensor<8xi32>
+// CHECK-DAG:           %[[VAL_7:.*]] = arith.constant 8 : index
+// CHECK-DAG:           %[[VAL_8:.*]] = arith.constant dense<8> : tensor<8xi32>
 // CHECK:           %[[VAL_9:.*]] = builtin.unrealized_conversion_cast %[[VAL_2]] : !tt.ptr<f32> to memref<*xf32>
 // CHECK:           %[[VAL_10:.*]] = builtin.unrealized_conversion_cast %[[VAL_0]] : !tt.ptr<f32> to memref<*xf32>
 // CHECK:           %[[VAL_11:.*]] = builtin.unrealized_conversion_cast %[[VAL_1]] : !tt.ptr<i32> to memref<*xi32>
