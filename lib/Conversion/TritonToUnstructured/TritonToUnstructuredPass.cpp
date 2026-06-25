@@ -458,6 +458,40 @@ public:
                   return success();
                 })
                 .Case<scf::YieldOp>([](auto) { return success(); })
+                .Case<triton::BitcastOp>([&](triton::BitcastOp op) {
+                  auto res = op.getResult();
+                  auto resType = res.getType();
+
+                  if (!triton::isPtrTypeLike(resType)) {
+                    return success();
+                  }
+
+                  // For bitcast on pointer tensors (e.g., ptr<i1> -> ptr<i8>),
+                  // propagate the offset info from the source but bitcast the
+                  // scalar base pointer to match the new element type.
+                  auto src = op.getSrc();
+                  auto offsetInfo = offsetMap.at(src);
+
+                  // Derive the scalar pointer type from the tensor pointer type.
+                  // e.g., tensor<1024x!tt.ptr<i8>> -> !tt.ptr<i8>
+                  auto resTensorType = cast<RankedTensorType>(resType);
+                  auto scalarPtrType = resTensorType.getElementType();
+
+                  // Bitcast the scalar base pointer to the new element type.
+                  OpBuilder b{op};
+                  Value newBasePtr = triton::BitcastOp::create(
+                      b, op->getLoc(), scalarPtrType, offsetInfo.ptr);
+
+                  PtrOffset newOffsetInfo{newBasePtr, resType,
+                                          offsetInfo.bitWidth,
+                                          offsetInfo.offset};
+
+                  offsetMap.insert({res, newOffsetInfo});
+                  workList.push(res);
+                  toDelete.push_back(op);
+
+                  return success();
+                })
                 .Case<triton::CatOp>([](triton::CatOp op) {
                   op->emitError("Do not support gather / scatter with multiple "
                                 "bases yet");
