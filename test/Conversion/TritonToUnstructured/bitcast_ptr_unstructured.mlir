@@ -19,7 +19,6 @@ module {
   }
 }
 
-// Tensor bitcast consumed; scalar bitcast of base pointer inserted.
-// CHECK: tt.bitcast %arg0 : !tt.ptr<i1> -> !tt.ptr<i8>
-// CHECK: tts.gather
-// CHECK: tts.scatter
+// CHECK: [[base:%.+]] = tt.bitcast %arg0 : !tt.ptr<i1> -> !tt.ptr<i8>
+// CHECK: [[result:%.+]] = tts.gather [[base]][{{.+}}] : (<i8>, tensor<1024xi32>) -> tensor<1024xi8>
+// CHECK: tts.scatter [[result]] into %arg1[{{.+}}] : tensor<1024xi8> into (<i8>, tensor<1024xi32>)
