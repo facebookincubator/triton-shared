@@ -1225,6 +1225,155 @@ private:
         });
   }
 
+  // Lower a multi-operand / multi-result `tt.reduce` (e.g. a fused
+  // (sum, sum-of-squares) moment reduction emitted by tl.reduce with a tuple
+  // combine_fn) into a single multi-result `linalg.reduce`. This keeps both
+  // sub-reductions in ONE loop nest over the reduction axis instead of forcing
+  // the front-end to emit two independent `tt.reduce`s. The combine body must
+  // contain exactly one supported reduction op per result, each combining the
+  // matching input/accumulator pair (no cross-result data flow), which is the
+  // shape of an element-wise tuple reduction. argmin/argmax-style reductions
+  // (cross-lane tie-breaking) are handled by the dedicated converters and are
+  // not matched here.
+  //
+  // The single-operand path (convertToLinalgReduce) is left untouched; this is
+  // only reached for getNumOperands() > 1.
+  LogicalResult
+  convertToMultiResultLinalgReduce(triton::ReduceOp op,
+                                   typename triton::ReduceOp::Adaptor adaptor,
+                                   ConversionPatternRewriter &rewriter) const {
+    auto loc = op.getLoc();
+    auto sources = adaptor.getOperands();
+    const unsigned numInputs = sources.size();
+    auto reductionOps = getRedOps(op);
+
+    // Each result needs its own reduction op in the body; require exactly one
+    // per result and that every one is a supported (associative, no-init-skip)
+    // reduction. Bail to the other converters / failure otherwise.
+    if (reductionOps.size() != numInputs) {
+      return rewriter.notifyMatchFailure(
+          op, "multi-result reduce: expected one reduction op per result");
+    }
+    for (Operation *redOp : reductionOps) {
+      if (!isReductionOpSupported(redOp)) {
+        return rewriter.notifyMatchFailure(
+            op, "multi-result reduce: unsupported reduction op in body");
+      }
+    }
+
+    // Verify each body op combines the i-th input with the i-th accumulator,
+    // i.e. operands come from block args {i, numInputs + i} in some order. This
+    // rejects cross-result combines (e.g. argmax tie-breaking) which must not
+    // be lowered as independent per-result reductions.
+    Block *body = op.getBody();
+    for (unsigned i = 0; i < numInputs; ++i) {
+      Operation *redOp = reductionOps[i];
+      if (redOp->getNumOperands() != 2) {
+        return rewriter.notifyMatchFailure(
+            op, "multi-result reduce: reduction op must be binary");
+      }
+      auto isExpectedArg = [&](Value v) {
+        auto arg = dyn_cast<BlockArgument>(v);
+        return arg && arg.getOwner() == body &&
+               (arg.getArgNumber() == i ||
+                arg.getArgNumber() == numInputs + i);
+      };
+      if (!isExpectedArg(redOp->getOperand(0)) ||
+          !isExpectedArg(redOp->getOperand(1))) {
+        return rewriter.notifyMatchFailure(
+            op, "multi-result reduce: result does not independently combine "
+                "its own input/accumulator pair");
+      }
+    }
+
+    auto axis = op.getAxis();
+    auto sourceType = cast<RankedTensorType>(sources.front().getType());
+    auto rank = sourceType.getRank();
+    auto isVectorReduce = (rank == 1);
+
+    // The manual vector-reduce (rank-1) lowering below is single-result only;
+    // multi-result tuple reductions over a 1-D input are rare and would need a
+    // separate hand-rolled affine lowering. Defer rather than miscompile.
+    if (isVectorReduce) {
+      return rewriter.notifyMatchFailure(
+          op, "multi-result reduce: vector (rank-1) reduce not supported");
+    }
+
+    // Optionally transpose every input so the reduction axis is dim 0. All
+    // inputs share the same shape/axis, so apply the identical permutation.
+    SmallVector<Value> srcs(sources.begin(), sources.end());
+    if (transposeToRank0 && axis != 0) {
+      SmallVector<int32_t> order;
+      order.reserve(rank);
+      order.push_back(axis);
+      for (int i = 0; i < rank; ++i) {
+        if (i != axis) {
+          order.push_back(i);
+        }
+      }
+      for (auto &src : srcs) {
+        src = getTransposedValue(src, loc, rewriter, order);
+      }
+      axis = 0;
+    }
+
+    // Build a per-result init tensor seeded with that reduction's identity,
+    // honoring the f16->f32 accumulation promotion used by the single path.
+    SmallVector<Value> initTensors;
+    SmallVector<bool> convertToF32;
+    initTensors.reserve(numInputs);
+    convertToF32.reserve(numInputs);
+    for (unsigned i = 0; i < numInputs; ++i) {
+      Operation *rop = reductionOps[i];
+      Type resTypeI = op.getResult()[i].getType();
+      bool toF32 = requiresF32Conversion(resTypeI, rop);
+      convertToF32.push_back(toF32);
+      Type constantType = toF32 ? Float32Type::get(rewriter.getContext())
+                                : cast<RankedTensorType>(srcs[i].getType())
+                                      .getElementType();
+      auto accBaseConstOp = getRedBaseConstOp(rewriter, rop, constantType);
+      Value init = tensor::EmptyOp::create(
+          rewriter, loc, cast<RankedTensorType>(resTypeI).getShape(),
+          constantType);
+      initTensors.push_back(
+          linalg::FillOp::create(rewriter, loc, ValueRange{accBaseConstOp},
+                                 ValueRange{init})
+              .result());
+    }
+
+    // One linalg.reduce, N inputs / N outputs. The combine region applies each
+    // result's reduction to (input_i, acc_i) independently — exactly the body
+    // we validated above.
+    auto linalgReduce = linalg::ReduceOp::create(
+        rewriter, loc, srcs, initTensors, SmallVector<int64_t>{axis},
+        [&](OpBuilder &opBuilder, Location loc, ValueRange args) {
+          // args layout: [in_0..in_{N-1}, acc_0..acc_{N-1}].
+          assert(args.size() == 2 * numInputs);
+          SmallVector<Value> yields;
+          yields.reserve(numInputs);
+          for (unsigned i = 0; i < numInputs; ++i) {
+            Value in = args[i];
+            Value acc = args[numInputs + i];
+            yields.push_back(getRedElement(in, acc, loc, reductionOps[i],
+                                           opBuilder, convertToF32[i]));
+          }
+          linalg::YieldOp::create(opBuilder, loc, yields);
+        });
+
+    // Truncate any f32-accumulated results back to the original result type.
+    SmallVector<Value> finalResults(linalgReduce.getResults().begin(),
+                                    linalgReduce.getResults().end());
+    for (unsigned i = 0; i < numInputs; ++i) {
+      if (convertToF32[i]) {
+        finalResults[i] = arith::TruncFOp::create(
+            rewriter, loc, op.getResult()[i].getType(), finalResults[i]);
+      }
+    }
+
+    rewriter.replaceOp(op, finalResults);
+    return success();
+  }
+
   LogicalResult
   convertToLinalgReduce(triton::ReduceOp op,
                         typename triton::ReduceOp::Adaptor adaptor,
@@ -1271,13 +1420,14 @@ private:
         source = getTransposedValue(source, op.getLoc(), rewriter, order);
         axis = 0;
       }
-    } else {
-      // preserving old behavior until we remove the transpose entirely.
-      if (axis == rank - 1 && !isVectorReduce) {
-        source = getTransposedValue(source, op.getLoc(), rewriter);
-        axis = rank - 2;
-      }
-    }
+    } 
+    // else {
+    //   // preserving old behavior until we remove the transpose entirely.
+    //   if (axis == rank - 1 && !isVectorReduce) {
+    //     source = getTransposedValue(source, op.getLoc(), rewriter);
+    //     axis = rank - 2;
+    //   }
+    // }
 
     bool convertToF32Precision = requiresF32Conversion(resType, rop);
 
@@ -1350,6 +1500,15 @@ public:
            "Expected reduction "
            "axis is within "
            "operand's rank");
+
+    // Multi-operand reductions (tuple combine_fn, e.g. fused (sum, sum^2)) are
+    // lowered to a single multi-result linalg.reduce. argmin/argmax are also
+    // multi-operand but are claimed first by their dedicated converters (higher
+    // benefit / matched earlier), so reaching here with >1 operand means an
+    // element-wise tuple reduction.
+    if (adaptor.getOperands().size() > 1) {
+      return convertToMultiResultLinalgReduce(op, adaptor, rewriter);
+    }
 
     return convertToLinalgReduce(op, adaptor, rewriter);
   }
