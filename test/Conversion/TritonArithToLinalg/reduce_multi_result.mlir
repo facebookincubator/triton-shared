@@ -1,9 +1,7 @@
 // Multi-operand / multi-result tt.reduce (e.g. a fused (sum, sum-of-squares)
 // moment reduction emitted by tl.reduce with a tuple combine_fn) must lower to
 // a SINGLE multi-result linalg.reduce that keeps both sub-reductions in one
-// loop nest over the reduction axis. This is the layer-norm single-pass moment
-// optimization; without it the front-end is forced to emit two independent
-// tt.reduce ops (two sweeps over the row).
+// loop nest over the reduction axis.
 //
 // Two configs are exercised:
 //   - @fused_sum_sumsq:    transpose-reduce-to-rank0=false (the config the
