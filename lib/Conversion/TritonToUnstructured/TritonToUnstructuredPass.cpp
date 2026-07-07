@@ -137,6 +137,7 @@
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/Interfaces/DataLayoutInterfaces.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -458,40 +459,79 @@ public:
                   return success();
                 })
                 .Case<scf::YieldOp>([](auto) { return success(); })
-                .Case<triton::BitcastOp>([&](triton::BitcastOp op) {
-                  auto res = op.getResult();
-                  auto resType = res.getType();
+                // .Case<triton::BitcastOp>([&](triton::BitcastOp op) {
+                //   auto res = op.getResult();
+                //   auto resType = res.getType();
 
-                  if (!triton::isPtrTypeLike(resType)) {
-                    return success();
-                  }
+                //   if (!triton::isPtrTypeLike(resType)) {
+                //     return success();
+                //   }
 
-                  // For bitcast on pointer tensors (e.g., ptr<i1> -> ptr<i8>),
-                  // propagate the offset info from the source but bitcast the
-                  // scalar base pointer to match the new element type.
-                  auto src = op.getSrc();
-                  auto offsetInfo = offsetMap.at(src);
+                //   auto src = op.getSrc();
+                //   auto srcType = src.getType();
 
-                  // Derive the scalar pointer type from the tensor pointer type.
-                  // e.g., tensor<1024x!tt.ptr<i8>> -> !tt.ptr<i8>
-                  auto resTensorType = cast<RankedTensorType>(resType);
-                  auto scalarPtrType = resTensorType.getElementType();
+                //   // Extract pointee types, handling both tensor of pointers
+                //   // and scalar pointer cases.
+                //   Type srcPointeeTy, dstPointeeTy;
+                //   if (auto srcTensorTy = dyn_cast<RankedTensorType>(srcType)) {
+                //     srcPointeeTy = cast<triton::PointerType>(
+                //         srcTensorTy.getElementType()).getPointeeType();
+                //     dstPointeeTy = cast<triton::PointerType>(
+                //         cast<RankedTensorType>(resType).getElementType())
+                //         .getPointeeType();
+                //   } else {
+                //     srcPointeeTy = cast<triton::PointerType>(srcType)
+                //         .getPointeeType();
+                //     dstPointeeTy = cast<triton::PointerType>(resType)
+                //         .getPointeeType();
+                //   }
 
-                  // Bitcast the scalar base pointer to the new element type.
-                  OpBuilder b{op};
-                  Value newBasePtr = triton::BitcastOp::create(
-                      b, op->getLoc(), scalarPtrType, offsetInfo.ptr);
+                //   // Use DataLayout to get the store size in bytes for each
+                //   // pointee type. This correctly handles sub-byte types
+                //   // (e.g., i1 occupies 1 byte in memory).
+                //   auto mod = op->getParentOfType<ModuleOp>();
+                //   mlir::DataLayout dataLayout(mod);
+                //   unsigned srcBytes = dataLayout.getTypeSize(srcPointeeTy);
+                //   unsigned dstBytes = dataLayout.getTypeSize(dstPointeeTy);
 
-                  PtrOffset newOffsetInfo{newBasePtr, resType,
-                                          offsetInfo.bitWidth,
-                                          offsetInfo.offset};
+                //   if (srcBytes != dstBytes) {
+                //     op->emitError(
+                //         "bitcast between pointer types with different strides "
+                //         "is not supported in offset propagation (src size: ")
+                //         << srcBytes << " bytes, dst size: " << dstBytes
+                //         << " bytes)";
+                //     return failure();
+                //   }
 
-                  offsetMap.insert({res, newOffsetInfo});
-                  workList.push(res);
-                  toDelete.push_back(op);
+                //   // Safe to reuse offset info — both pointer types have the
+                //   // same effective byte stride, so accumulated offsets remain
+                //   // valid after the bitcast.
+                //   auto offsetInfo = offsetMap.at(src);
 
-                  return success();
-                })
+                //   // Get the scalar pointer type for the new base pointer.
+                //   Type scalarPtrType;
+                //   if (auto resTensorTy = dyn_cast<RankedTensorType>(resType)) {
+                //     scalarPtrType = resTensorTy.getElementType();
+                //   } else {
+                //     scalarPtrType = resType;
+                //   }
+
+                //   // Bitcast the scalar base pointer to match the new pointee
+                //   // type.
+                //   OpBuilder b{op};
+                //   Value newBasePtr = triton::BitcastOp::create(
+                //       b, op->getLoc(), scalarPtrType, offsetInfo.ptr);
+
+                //   PtrOffset newOffsetInfo{newBasePtr, resType,
+                //                           offsetInfo.bitWidth,
+                //                           offsetInfo.offset};
+
+                //   offsetMap.insert({res, newOffsetInfo});
+                //   workList.push(res);
+                //   toDelete.push_back(op);
+
+                //   return success();
+                // })
                 .Case<triton::CatOp>([](triton::CatOp op) {
                   op->emitError("Do not support gather / scatter with multiple "
                                 "bases yet");
