@@ -1,12 +1,10 @@
-// Multi-operand / multi-result tt.reduce (e.g. a fused (sum, sum-of-squares)
-// moment reduction emitted by tl.reduce with a tuple combine_fn) must lower to
-// a SINGLE multi-result linalg.reduce that keeps both sub-reductions in one
-// loop nest over the reduction axis.
+// Multi-operand / multi-result tt.reduce must lower to a SINGLE multi-result
+// linalg.reduce that keeps both sub-reductions in one loop nest over the
+// reduction axis.
 //
 // Two configs are exercised:
-//   - @fused_sum_sumsq:    transpose-reduce-to-rank0=false (the config the
-//                          Hexagon experimental pipeline runs with) -> the
-//                          reduce keeps dimensions = [1].
+//   - @fused_sum_sumsq:    transpose-reduce-to-rank0=false -> the reduce
+//                          keeps dimensions = [1].
 //   - @fused_sum_sumsq_t:  transpose-reduce-to-rank0=true (pass default) ->
 //                          BOTH inputs are transposed with the same
 //                          permutation and the reduce runs on dimensions = [0].
