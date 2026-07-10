@@ -1099,9 +1099,19 @@ struct MatmulConverter : public OpConversionPattern<triton::DotOp> {
                                          ValueRange{init})
                       .result();
 
-    auto res = linalg::MatmulOp::create(rewriter, loc, ValueRange{opa, opb},
-                                        ValueRange{zeroes})
-                   .getResult(0);
+    auto rank = dstType.getRank();
+    Value res;
+    if (rank > 3) {
+      return failure();
+    } else if (rank == 3) {
+      res = linalg::BatchMatmulOp::create(rewriter, loc, ValueRange{opa, opb},
+                                          ValueRange{zeroes})
+                .getResult(0);
+    } else {
+      res = linalg::MatmulOp::create(rewriter, loc, ValueRange{opa, opb},
+                                     ValueRange{zeroes})
+                .getResult(0);
+    }
 
     if (!skipC) {
       if (integers) {
