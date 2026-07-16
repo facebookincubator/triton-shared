@@ -2,9 +2,9 @@
 # Licensed under the MIT license.
 
 # Test for bitcast pointer handling in TritonToUnstructuredPass.
-# Verifies that pointer arithmetic and bitcasts between same-stride types
-# (i1/i8 — 1 byte; i32/f32 — 4 bytes) access the correct memory addresses,
-# and that a bitcast which changes the byte stride is rejected at compile time.
+# Verifies that pointer arithmetic and bitcasts between same-size types
+# (i1/i8 — both 1 byte in MLIR DataLayout) access the correct memory
+# addresses via the unstructured (gather/scatter) lowering path.
 
 import pytest
 import torch

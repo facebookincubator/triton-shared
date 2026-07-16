@@ -1,7 +1,7 @@
 // RUN: triton-shared-opt --triton-to-unstructured --split-input-file %s 2>&1 | FileCheck %s
 
-// The error from Test 4 (i8->i16 stride mismatch) appears first in the
-// combined output because stderr is unbuffered.
+// The error from Test 4 (i8->i16 pointee byte size mismatch) appears first
+// in the combined output because stderr is unbuffered.
 // CHECK: error: bitcast between pointer types with different strides
 
 // Test 1: addptr -> bitcast(i1->i8) -> load
@@ -94,9 +94,9 @@ module {
 
 // Test 4: addptr -> bitcast(i1->i8) -> addptr -> bitcast(i8->i16) -> addptr -> load
 // The first bitcast (i1->i8) is valid (both 1 byte), but the second bitcast
-// (i8->i16) changes the byte stride (1 byte vs 2 bytes). The pass must reject
-// this because the accumulated element-offset would be misinterpreted: offset N
-// means N*1 bytes for ptr<i8> but N*2 bytes for ptr<i16>.
+// (i8->i16) has different pointee byte sizes (1 byte vs 2 bytes). The pass
+// rejects this because the accumulated element-offset would be misinterpreted:
+// offset N means N*1 bytes for ptr<i8> but N*2 bytes for ptr<i16>.
 
 module {
   tt.func public @bitcast_i8_to_i16_rejected(%arg0: !tt.ptr<i1>, %arg1: !tt.ptr<i16>) {
