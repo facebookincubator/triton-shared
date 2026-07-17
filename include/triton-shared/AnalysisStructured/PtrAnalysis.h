@@ -149,6 +149,7 @@ class PtrAnalysis {
 
   DenseSet<Value> maybeStructuredArgs;
   const bool enableMakeGatherScatterTensorPtr;
+  const bool enableModuloSupport;
   // If false, PtrAnalysis will analysis structured ptr while only identify
   // unstructured ptr.
   // If true, PtrAnalysis will caclulate strides and offsets for
@@ -186,8 +187,10 @@ class PtrAnalysis {
   bool isAnalysisingUnstructured = false;
 
 public:
-  PtrAnalysis(bool enableMakeGatherScatterTensorPtr)
-      : enableMakeGatherScatterTensorPtr(enableMakeGatherScatterTensorPtr) {}
+  PtrAnalysis(bool enableMakeGatherScatterTensorPtr,
+              bool enableModuloSupport = true)
+      : enableMakeGatherScatterTensorPtr(enableMakeGatherScatterTensorPtr),
+        enableModuloSupport(enableModuloSupport) {}
   void initializeMaybeStructuredArgs(Operation *op);
 
   llvm::SmallDenseMap<Value, PtrState> knownPtrs;

@@ -799,6 +799,11 @@ LogicalResult PtrAnalysis::visitOperandRem(arith::RemSIOp remOp,
                                            PtrState &state, const Location loc,
                                            OpBuilder &builder) {
   assert(state.isEmpty());
+
+  if (!enableModuloSupport) {
+    return failure();
+  }
+
   if (isAnalysisingUnstructured) {
     assert(enableMakeGatherScatterTensorPtr &&
            "PtrAnalysis: isAnalysisingUnstructured should only be true "
