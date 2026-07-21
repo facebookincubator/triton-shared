@@ -466,33 +466,33 @@ public:
                   if (!triton::isPtrTypeLike(resType)) {
                     return success();
                   }
-
+                  
+                  // Use the saved ptrType from offsetMap rather than
+                  // src.getType(). When src is an scf.for iter-arg, the
+                  // for-loop handler retypes it to an integer offset type
+                  // in-place before this use is processed, so the live type
+                  // may no longer be a pointer type.
                   auto src = op.getSrc();
-                  auto srcType = src.getType();
+                  auto offsetInfo = offsetMap.at(src);
 
-                  // Extract pointee types, handling both tensor of pointers
-                  // and scalar pointer cases.
-                  Type srcPointeeTy, dstPointeeTy;
-                  if (auto srcTensorTy = dyn_cast<RankedTensorType>(srcType)) {
-                    srcPointeeTy = cast<triton::PointerType>(
-                        srcTensorTy.getElementType()).getPointeeType();
-                    dstPointeeTy = cast<triton::PointerType>(
-                        cast<RankedTensorType>(resType).getElementType())
-                        .getPointeeType();
-                  } else {
-                    srcPointeeTy = cast<triton::PointerType>(srcType)
-                        .getPointeeType();
-                    dstPointeeTy = cast<triton::PointerType>(resType)
-                        .getPointeeType();
-                  }
+                  // Extract pointee types. getPointeeType handles both
+                  // tensor-of-pointers and scalar pointers, returning
+                  // tensor<Nxelem> or elem respectively. We unwrap the
+                  // tensor to get the scalar type for DataLayout.
+                  Type srcPointee = triton::getPointeeType(offsetInfo.ptrType);
+                  Type dstPointee = triton::getPointeeType(resType);
+                  if (auto t = dyn_cast<RankedTensorType>(srcPointee))
+                    srcPointee = t.getElementType();
+                  if (auto t = dyn_cast<RankedTensorType>(dstPointee))
+                    dstPointee = t.getElementType();
 
                   // Use DataLayout to get the store size in bytes for each
                   // pointee type. This correctly handles sub-byte types
                   // (e.g., i1 occupies 1 byte in memory).
                   auto mod = op->getParentOfType<ModuleOp>();
                   mlir::DataLayout dataLayout(mod);
-                  unsigned srcBytes = dataLayout.getTypeSize(srcPointeeTy);
-                  unsigned dstBytes = dataLayout.getTypeSize(dstPointeeTy);
+                  unsigned srcBytes = dataLayout.getTypeSize(srcPointee);
+                  unsigned dstBytes = dataLayout.getTypeSize(dstPointee);
 
                   if (srcBytes != dstBytes) {
                     op->emitError(
@@ -506,21 +506,21 @@ public:
                   // Safe to reuse offset info — both pointer types have the
                   // same effective byte stride, so accumulated offsets remain
                   // valid after the bitcast.
-                  auto offsetInfo = offsetMap.at(src);
 
-                  // Get the scalar pointer type for the new base pointer.
-                  Type scalarPtrType;
+                  // Get the destination pointer type for the base pointer
+                  // bitcast. For tensors, extract the element type (e.g.,
+                  // tensor<128x!tt.ptr<i8>> → !tt.ptr<i8>).
+                  Type dstPtrType;
                   if (auto resTensorTy = dyn_cast<RankedTensorType>(resType)) {
-                    scalarPtrType = resTensorTy.getElementType();
+                    dstPtrType = resTensorTy.getElementType();
                   } else {
-                    scalarPtrType = resType;
+                    dstPtrType = resType;
                   }
 
-                  // Bitcast the scalar base pointer to match the new pointee
-                  // type.
+                  // Bitcast the base pointer to match the new pointee type.
                   OpBuilder b{op};
                   Value newBasePtr = triton::BitcastOp::create(
-                      b, op->getLoc(), scalarPtrType, offsetInfo.ptr);
+                      b, op->getLoc(), dstPtrType, offsetInfo.ptr);
 
                   PtrOffset newOffsetInfo{newBasePtr, resType,
                                           offsetInfo.bitWidth,

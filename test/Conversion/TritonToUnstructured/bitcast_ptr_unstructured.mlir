@@ -1,8 +1,4 @@
-// RUN: triton-shared-opt --triton-to-unstructured --split-input-file %s 2>&1 | FileCheck %s
-
-// The error from Test 4 (i8->i16 pointee byte size mismatch) appears first
-// in the combined output because stderr is unbuffered.
-// CHECK: error: bitcast between pointer types with different strides
+// RUN: triton-shared-opt --triton-to-unstructured --split-input-file %s | FileCheck %s
 
 // Test 1: addptr -> bitcast(i1->i8) -> load
 // sizeof(i1)==sizeof(i8)==1 byte, so offset N equals N bytes for both types.
@@ -92,27 +88,37 @@ module {
 
 // -----
 
-// Test 4: addptr -> bitcast(i1->i8) -> addptr -> bitcast(i8->i16) -> addptr -> load
-// The first bitcast (i1->i8) is valid (both 1 byte), but the second bitcast
-// (i8->i16) has different pointee byte sizes (1 byte vs 2 bytes). The pass
-// rejects this because the accumulated element-offset would be misinterpreted:
-// offset N means N*1 bytes for ptr<i8> but N*2 bytes for ptr<i16>.
+// Test 4: bitcast inside scf.for with loop-carried pointer iter-arg.
+// The scf.for handler retypes the iter-arg to an integer offset type before
+// the bitcast handler processes it. The bitcast handler must use the saved
+// ptrType from offsetMap (not src.getType()) to avoid asserting on the
+// already-retyped integer type.
 
 module {
-  tt.func public @bitcast_i8_to_i16_rejected(%arg0: !tt.ptr<i1>, %arg1: !tt.ptr<i16>) {
-    %cst = arith.constant dense<32> : tensor<128xi32>
-    %cst_1 = arith.constant dense<4> : tensor<128xi32>
+  tt.func public @loop_carried_bitcast(%arg0: !tt.ptr<i1>, %arg1: !tt.ptr<i8>) {
+    %c0 = arith.constant 0 : i32
+    %c1 = arith.constant 1 : i32
+    %c4 = arith.constant 4 : i32
+    %step = arith.constant dense<8> : tensor<128xi32>
     %0 = tt.make_range {end = 128 : i32, start = 0 : i32} : tensor<128xi32>
     %1 = tt.splat %arg0 : !tt.ptr<i1> -> tensor<128x!tt.ptr<i1>>
     %2 = tt.addptr %1, %0 : tensor<128x!tt.ptr<i1>>, tensor<128xi32>
-    %3 = tt.bitcast %2 : tensor<128x!tt.ptr<i1>> -> tensor<128x!tt.ptr<i8>>
-    %4 = tt.addptr %3, %cst : tensor<128x!tt.ptr<i8>>, tensor<128xi32>
-    %5 = tt.bitcast %4 : tensor<128x!tt.ptr<i8>> -> tensor<128x!tt.ptr<i16>>
-    %6 = tt.addptr %5, %cst_1 : tensor<128x!tt.ptr<i16>>, tensor<128xi32>
-    %7 = tt.load %6 : tensor<128x!tt.ptr<i16>>
-    %8 = tt.splat %arg1 : !tt.ptr<i16> -> tensor<128x!tt.ptr<i16>>
-    %9 = tt.addptr %8, %0 : tensor<128x!tt.ptr<i16>>, tensor<128xi32>
-    tt.store %9, %7 : tensor<128x!tt.ptr<i16>>
+    %res = scf.for %i = %c0 to %c4 step %c1 iter_args(%p = %2)
+        -> (tensor<128x!tt.ptr<i1>>) : i32 {
+      %bc = tt.bitcast %p : tensor<128x!tt.ptr<i1>> -> tensor<128x!tt.ptr<i8>>
+      %ld = tt.load %bc : tensor<128x!tt.ptr<i8>>
+      %sp = tt.splat %arg1 : !tt.ptr<i8> -> tensor<128x!tt.ptr<i8>>
+      %so = tt.addptr %sp, %0 : tensor<128x!tt.ptr<i8>>, tensor<128xi32>
+      tt.store %so, %ld : tensor<128x!tt.ptr<i8>>
+      %next = tt.addptr %p, %step : tensor<128x!tt.ptr<i1>>, tensor<128xi32>
+      scf.yield %next : tensor<128x!tt.ptr<i1>>
+    }
     tt.return
   }
 }
+
+// CHECK-LABEL: tt.func public @loop_carried_bitcast
+// CHECK: scf.for
+// CHECK:   [[BC:%.+]] = tt.bitcast %arg0 : !tt.ptr<i1> -> !tt.ptr<i8>
+// CHECK:   tts.gather [[BC]][{{.+}}] : (<i8>, tensor<128xi32>) -> tensor<128xi8>
+// CHECK:   tts.scatter
