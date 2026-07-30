@@ -142,6 +142,7 @@
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/Operation.h"
 #include "mlir/IR/TypeRange.h"
@@ -658,11 +659,25 @@ public:
   }
 
   void runOnOperation() override {
-    if (failed(processUnstructuredPtrs(offsetBitWidth))) {
-      getOperation()->emitWarning(
-          "Cannot transform tensor of pointers into a single base pointer "
-          "with tensor of offsets");
-      return;
+    // Only emit the generic fallback warning if no specific error was
+    // already reported (avoids duplicate diagnostics under --verify-diagnostics).
+    bool emittedError = false;
+    {
+      mlir::ScopedDiagnosticHandler diagHandler(
+          &getContext(), [&](mlir::Diagnostic &diag) {
+            if (diag.getSeverity() == mlir::DiagnosticSeverity::Error)
+              emittedError = true;
+            return failure();
+          });
+
+      if (failed(processUnstructuredPtrs(offsetBitWidth))) {
+        if (!emittedError) {
+          getOperation()->emitWarning(
+              "Cannot transform tensor of pointers into a single base "
+              "pointer with tensor of offsets");
+        }
+        return;
+      }
     }
 
     PassManager pm(&getContext(), getOperation().getOperationName());
