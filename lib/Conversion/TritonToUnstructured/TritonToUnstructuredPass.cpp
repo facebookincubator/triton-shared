@@ -659,8 +659,6 @@ public:
   }
 
   void runOnOperation() override {
-    // Only emit the generic fallback warning if no specific error was
-    // already reported (avoids duplicate diagnostics under --verify-diagnostics).
     bool emittedError = false;
     {
       mlir::ScopedDiagnosticHandler diagHandler(
