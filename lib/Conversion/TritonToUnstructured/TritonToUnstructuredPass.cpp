@@ -137,10 +137,12 @@
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/Interfaces/DataLayoutInterfaces.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/Operation.h"
 #include "mlir/IR/TypeRange.h"
@@ -458,6 +460,79 @@ public:
                   return success();
                 })
                 .Case<scf::YieldOp>([](auto) { return success(); })
+                .Case<triton::BitcastOp>([&](triton::BitcastOp op) {
+                  auto res = op.getResult();
+                  auto resType = res.getType();
+
+                  if (!triton::isPtrTypeLike(resType)) {
+                    return success();
+                  }
+                  
+                  // Use the saved ptrType from offsetMap rather than
+                  // src.getType(). When src is an scf.for iter-arg, the
+                  // for-loop handler retypes it to an integer offset type
+                  // in-place before this use is processed, so the live type
+                  // may no longer be a pointer type.
+                  auto src = op.getSrc();
+                  auto offsetInfo = offsetMap.at(src);
+
+                  // Extract pointee types. getPointeeType handles both
+                  // tensor-of-pointers and scalar pointers, returning
+                  // tensor<Nxelem> or elem respectively. We unwrap the
+                  // tensor to get the scalar type for DataLayout.
+                  Type srcPointee = triton::getPointeeType(offsetInfo.ptrType);
+                  Type dstPointee = triton::getPointeeType(resType);
+                  if (auto t = dyn_cast<RankedTensorType>(srcPointee))
+                    srcPointee = t.getElementType();
+                  if (auto t = dyn_cast<RankedTensorType>(dstPointee))
+                    dstPointee = t.getElementType();
+
+                  // Use DataLayout to get the store size in bytes for each
+                  // pointee type. This correctly handles sub-byte types
+                  // (e.g., i1 occupies 1 byte in memory).
+                  auto mod = op->getParentOfType<ModuleOp>();
+                  mlir::DataLayout dataLayout(mod);
+                  unsigned srcBytes = dataLayout.getTypeSize(srcPointee);
+                  unsigned dstBytes = dataLayout.getTypeSize(dstPointee);
+
+                  if (srcBytes != dstBytes) {
+                    op->emitError(
+                        "bitcast between pointer types with different strides "
+                        "is not supported in offset propagation (src size: ")
+                        << srcBytes << " bytes, dst size: " << dstBytes
+                        << " bytes)";
+                    return failure();
+                  }
+
+                  // Safe to reuse offset info — both pointer types have the
+                  // same effective byte stride, so accumulated offsets remain
+                  // valid after the bitcast.
+
+                  // Get the destination pointer type for the base pointer
+                  // bitcast. For tensors, extract the element type (e.g.,
+                  // tensor<128x!tt.ptr<i8>> → !tt.ptr<i8>).
+                  Type dstPtrType;
+                  if (auto resTensorTy = dyn_cast<RankedTensorType>(resType)) {
+                    dstPtrType = resTensorTy.getElementType();
+                  } else {
+                    dstPtrType = resType;
+                  }
+
+                  // Bitcast the base pointer to match the new pointee type.
+                  OpBuilder b{op};
+                  Value newBasePtr = triton::BitcastOp::create(
+                      b, op->getLoc(), dstPtrType, offsetInfo.ptr);
+
+                  PtrOffset newOffsetInfo{newBasePtr, resType,
+                                          offsetInfo.bitWidth,
+                                          offsetInfo.offset};
+
+                  offsetMap.insert({res, newOffsetInfo});
+                  workList.push(res);
+                  toDelete.push_back(op);
+
+                  return success();
+                })
                 .Case<triton::CatOp>([](triton::CatOp op) {
                   op->emitError("Do not support gather / scatter with multiple "
                                 "bases yet");
@@ -584,11 +659,23 @@ public:
   }
 
   void runOnOperation() override {
-    if (failed(processUnstructuredPtrs(offsetBitWidth))) {
-      getOperation()->emitWarning(
-          "Cannot transform tensor of pointers into a single base pointer "
-          "with tensor of offsets");
-      return;
+    bool emittedError = false;
+    {
+      mlir::ScopedDiagnosticHandler diagHandler(
+          &getContext(), [&](mlir::Diagnostic &diag) {
+            if (diag.getSeverity() == mlir::DiagnosticSeverity::Error)
+              emittedError = true;
+            return failure();
+          });
+
+      if (failed(processUnstructuredPtrs(offsetBitWidth))) {
+        if (!emittedError) {
+          getOperation()->emitWarning(
+              "Cannot transform tensor of pointers into a single base "
+              "pointer with tensor of offsets");
+        }
+        return;
+      }
     }
 
     PassManager pm(&getContext(), getOperation().getOperationName());
