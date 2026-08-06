@@ -395,12 +395,9 @@ LogicalResult MaskState::parseAnd(arith::AndIOp andOp, const Location loc,
           masks.push_back(nullptr);
         } else {
           uint32_t size = shapedType.getShape()[i];
-          auto structuredMaskToUnstructuredMask = [](MaskState state,
-                                                     unsigned dim,
-                                                     uint32_t size,
-                                                     OpBuilder &builder,
-                                                     Location loc) {
-            OpFoldResult ofr = state.isMask() ? state.dims[dim] : state.scalar;
+          auto structuredMaskToUnstructuredMask =
+              [](OpFoldResult ofr, uint32_t size, OpBuilder &builder,
+                 Location loc) -> Value {
             if (auto intV = getIntAttr(ofr)) {
               if (intV == size) {
                 // Full mask.
@@ -422,12 +419,24 @@ LogicalResult MaskState::parseAnd(arith::AndIOp andOp, const Location loc,
                                          arith::CmpIPredicate::ult, range, v)
                 .getResult();
           };
+          auto getMaterializationOfr = [i](const MaskState &state) {
+            if (!state.isMask()) {
+              return state.scalar;
+            }
+            return i < state.dims.size() ? state.dims[i] : OpFoldResult();
+          };
           if (!lhsV) {
-            lhsV = structuredMaskToUnstructuredMask(lhsState, i, size, builder,
-                                                    loc);
+            OpFoldResult ofr = getMaterializationOfr(lhsState);
+            if (!ofr) {
+              return failure();
+            }
+            lhsV = structuredMaskToUnstructuredMask(ofr, size, builder, loc);
           } else if (!rhsV) {
-            rhsV = structuredMaskToUnstructuredMask(rhsState, i, size, builder,
-                                                    loc);
+            OpFoldResult ofr = getMaterializationOfr(rhsState);
+            if (!ofr) {
+              return failure();
+            }
+            rhsV = structuredMaskToUnstructuredMask(ofr, size, builder, loc);
           }
           if (!lhsV) {
             masks.push_back(rhsV);
