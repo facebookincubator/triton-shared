@@ -33,25 +33,12 @@ def kernel(
     pid0 = tl.program_id(axis=0)
     pid1 = tl.program_id(axis=1)
 
-    input_ptr = tl.make_block_ptr(
-        base=x_ptr,
-        shape=[n_rows, n_cols],
-        strides=[stride_0, stride_1],
-        offsets=[pid0 * BLOCK_SIZE_ROW, pid1 * BLOCK_SIZE_COL],
-        block_shape=[BLOCK_SIZE_ROW, BLOCK_SIZE_COL],
-        order=[1, 0],
-    )
-    x = tl.load(input_ptr)
+    rows = tl.arange(0, BLOCK_SIZE_ROW)
+    cols = tl.arange(0, BLOCK_SIZE_COL)
+    offsets = (pid0 * BLOCK_SIZE_ROW + rows[:, None]) * stride_0 + (pid1 * BLOCK_SIZE_COL + cols[None, :]) * stride_1
+    x = tl.load(x_ptr + offsets)
     x = (2 * x) + 1
-    output_ptr = tl.make_block_ptr(
-        base=y_ptr,
-        shape=[n_rows, n_cols],
-        strides=[stride_0, stride_1],
-        offsets=[pid0 * BLOCK_SIZE_ROW, pid1 * BLOCK_SIZE_COL],
-        block_shape=[BLOCK_SIZE_ROW, BLOCK_SIZE_COL],
-        order=[1, 0],
-    )
-    tl.store(output_ptr, x)
+    tl.store(y_ptr + offsets, x)
 
 
 def test(device):

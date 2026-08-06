@@ -9,24 +9,11 @@ import triton.language as tl
 
 @triton.jit
 def block_copy_kernel(a_ptr, b_ptr):
-    a_block_ptr = tl.make_block_ptr(
-        base=a_ptr + 8,
-        shape=(2, 2),
-        strides=(2, 1),
-        offsets=(0, 0),
-        block_shape=(2, 2),
-        order=(1, 0),
-    )
-    b_block_ptr = tl.make_block_ptr(
-        base=b_ptr,
-        shape=(2, 2),
-        strides=(2, 1),
-        offsets=(0, 0),
-        block_shape=(2, 2),
-        order=(1, 0),
-    )
-    a = tl.load(a_block_ptr, boundary_check=(0,))
-    tl.store(b_block_ptr, a, boundary_check=(0,))
+    rows = tl.arange(0, 2)
+    cols = tl.arange(0, 2)
+    offsets = rows[:, None] * 2 + cols[None, :] + 8
+    a = tl.load(a_ptr + offsets)
+    tl.store(b_ptr + rows[:, None] * 2 + cols[None, :], a)
 
 
 

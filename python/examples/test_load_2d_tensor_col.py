@@ -29,24 +29,10 @@ def kernel(
     BLOCK_SIZE_COL: tl.constexpr,
 ):
     pid0 = tl.program_id(axis=0)
-    input_ptr = tl.make_block_ptr(
-        base=x_ptr,
-        shape=[n_rows, n_cols],
-        strides=[BLOCK_SIZE_COL, 1],
-        offsets=[0, pid0],
-        block_shape=[BLOCK_SIZE_ROW, 1],
-        order=[1, 0],
-    )
-    x = tl.load(input_ptr)
-    output_ptr = tl.make_block_ptr(
-        base=y_ptr,
-        shape=[n_rows, n_cols],
-        strides=[BLOCK_SIZE_COL, 1],
-        offsets=[0, pid0],
-        block_shape=[BLOCK_SIZE_ROW, 1],
-        order=[1, 0],
-    )
-    tl.store(output_ptr, x)
+    rows = tl.arange(0, BLOCK_SIZE_ROW)
+    offsets = rows * BLOCK_SIZE_COL + pid0
+    x = tl.load(x_ptr + offsets)
+    tl.store(y_ptr + offsets, x)
 
 
 def test(device):
