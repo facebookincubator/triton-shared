@@ -28,6 +28,6 @@ module {
 // CHECK: loc(#loc9)
 // CHECK: #di_file = #llvm.di_file<"program.py" in "/path/to">
 // CHECK: #di_subroutine_type = #llvm.di_subroutine_type<callingConvention = DW_CC_normal>
-// CHECK: #di_compile_unit = #llvm.di_compile_unit<id = distinct[0]<>, sourceLanguage = DW_LANG_Python, file = #di_file, producer = "MLIR", isOptimized = false, emissionKind = LineTablesOnly>
+// CHECK: #di_compile_unit = #llvm.di_compile_unit<id = distinct[0]<>, sourceLanguage = DW_LANG_Python, file = #di_file, producer = "MLIR", emissionKind = LineTablesOnly>
 // CHECK: #di_subprogram = #llvm.di_subprogram<id = distinct[1]<>, compileUnit = #di_compile_unit, scope = #di_file, name = "kernel", linkageName = "kernel", file = #di_file, line = 9, subprogramFlags = Definition, type = #di_subroutine_type>
 // CHECK: #loc9 = loc(fused<#di_subprogram>[#loc])
