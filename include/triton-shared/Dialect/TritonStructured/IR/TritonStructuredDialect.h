@@ -11,15 +11,18 @@
 #include "mlir/IR/Dialect.h"
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/OpDefinition.h"
+#include "mlir/IR/Types.h"
 
 #include "triton/Dialect/Triton/IR/Dialect.h"
 
 namespace mlir {
 namespace tts {
 namespace utils {
+mlir::Type getSrcPtrType(mlir::Type type);
+bool hasPtrValue(mlir::Value value);
 mlir::Value getScalarValue(mlir::Value operand, mlir::Location loc,
                            mlir::OpBuilder &builder);
-}
+} // namespace utils
 } // namespace tts
 } // namespace mlir
 

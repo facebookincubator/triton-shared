@@ -58,6 +58,7 @@ class TritonToStructuredPass
         *tts::GetStructuredStateOp::getOffsetAndStrideTypes(context, t);
     tupleTypes.append(offsetTypes);
     tupleTypes.append(strideTypes);
+    tupleTypes.push_back(tts::utils::getSrcPtrType(t));
     return TupleType::get(context, tupleTypes);
   }
 
@@ -91,8 +92,10 @@ public:
       // because only values of int and index type can potentially be part of a
       // pointer arithmetic sequence.
       auto elementType = tensorType.getElementType();
+      // Keep this in sync with TT_IndexTensorLike, which only accepts i32/i64
+      // tensors as structured-state operands.
       if (isa<triton::PointerType>(elementType) ||
-          (elementType.isIntOrIndex() && !elementType.isInteger(1))) {
+          elementType.isInteger(32) || elementType.isInteger(64)) {
         types =
             SmallVector<Type>{getStructuredStateTupleType(context, tensorType)};
         return success();
@@ -182,8 +185,8 @@ public:
     // maps to a sequence of {pointer, offset_0, offset_1,..., stride_0,
     // stride_1,...}
     converter.addConversion(
-        [](TupleType tupleType, SmallVectorImpl<Type> &types)
-            -> std::optional<LogicalResult> {
+        [](TupleType tupleType,
+           SmallVectorImpl<Type> &types) -> std::optional<LogicalResult> {
           tupleType.getFlattenedTypes(types);
           return success();
         });
