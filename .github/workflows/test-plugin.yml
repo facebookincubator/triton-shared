@@ -73,7 +73,7 @@ jobs:
       working-directory: triton
       run: |
         python3 -m pip install --upgrade pip
-        python3 -m pip install cmake==3.24 ninja pytest-xdist pybind11 setuptools
+        python3 -m pip install cmake==3.24 ninja pytest-xdist nanobind==2.10.2 setuptools
         sudo apt-get update -y
         sudo apt-get install -y ccache clang lld
         export TRITON_PLUGIN_DIRS="${GITHUB_WORKSPACE}/triton_shared"
@@ -154,7 +154,7 @@ jobs:
       working-directory: triton
       run: |
         python3 -m pip install --upgrade pip
-        python3 -m pip install cmake==3.24 ninja pytest-xdist pybind11 setuptools
+        python3 -m pip install cmake==3.24 ninja pytest-xdist nanobind==2.10.2 setuptools
         sudo apt-get update -y
         sudo apt-get install -y ccache clang lld
         export TRITON_PLUGIN_DIRS="${GITHUB_WORKSPACE}/triton_shared"
