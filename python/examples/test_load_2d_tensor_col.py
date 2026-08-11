@@ -15,7 +15,7 @@ import triton.language as tl
 |     |     |     |     |
 |-----|-----|-----|-----|
 
-Each instance loads the entire column
+Each instance loads BLOCK_SIZE_COL columns
 """
 
 
@@ -29,23 +29,33 @@ def kernel(
     BLOCK_SIZE_COL: tl.constexpr,
 ):
     pid0 = tl.program_id(axis=0)
-    rows = tl.arange(0, BLOCK_SIZE_ROW)
-    offsets = rows * BLOCK_SIZE_COL + pid0
-    x = tl.load(x_ptr + offsets)
-    tl.store(y_ptr + offsets, x)
+    input_desc = tl.make_tensor_descriptor(
+        base=x_ptr,
+        shape=[n_rows, n_cols],
+        strides=[n_cols, 1],
+        block_shape=[BLOCK_SIZE_ROW, BLOCK_SIZE_COL],
+    )
+    x = input_desc.load([0, pid0 * BLOCK_SIZE_COL])
+    output_desc = tl.make_tensor_descriptor(
+        base=y_ptr,
+        shape=[n_rows, n_cols],
+        strides=[n_cols, 1],
+        block_shape=[BLOCK_SIZE_ROW, BLOCK_SIZE_COL],
+    )
+    output_desc.store([0, pid0 * BLOCK_SIZE_COL], x)
 
 
 def test(device):
     n_rows = 4
-    n_cols = 2
+    n_cols = 8
     x = torch.arange(0, n_rows * n_cols, 1, device=device, dtype=torch.float32).reshape(
         [n_rows, n_cols]
     )
     output = torch.full([n_rows, n_cols], -1, device=device, dtype=x.dtype)
     BLOCK_SIZE_ROW = n_rows
-    BLOCK_SIZE_COL = n_cols
+    BLOCK_SIZE_COL = 4
 
-    grid = lambda meta: (n_cols,)
+    grid = lambda meta: (n_cols // BLOCK_SIZE_COL,)
 
     kernel[grid](
         x,

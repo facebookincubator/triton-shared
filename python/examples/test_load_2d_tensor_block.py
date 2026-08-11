@@ -33,12 +33,21 @@ def kernel(
     pid0 = tl.program_id(axis=0)
     pid1 = tl.program_id(axis=1)
 
-    rows = tl.arange(0, BLOCK_SIZE_ROW)
-    cols = tl.arange(0, BLOCK_SIZE_COL)
-    offsets = (pid0 * BLOCK_SIZE_ROW + rows[:, None]) * stride_0 + (pid1 * BLOCK_SIZE_COL + cols[None, :]) * stride_1
-    x = tl.load(x_ptr + offsets)
+    input_desc = tl.make_tensor_descriptor(
+        base=x_ptr,
+        shape=[n_rows, n_cols],
+        strides=[stride_0, stride_1],
+        block_shape=[BLOCK_SIZE_ROW, BLOCK_SIZE_COL],
+    )
+    x = input_desc.load([pid0 * BLOCK_SIZE_ROW, pid1 * BLOCK_SIZE_COL])
     x = (2 * x) + 1
-    tl.store(y_ptr + offsets, x)
+    output_desc = tl.make_tensor_descriptor(
+        base=y_ptr,
+        shape=[n_rows, n_cols],
+        strides=[stride_0, stride_1],
+        block_shape=[BLOCK_SIZE_ROW, BLOCK_SIZE_COL],
+    )
+    output_desc.store([pid0 * BLOCK_SIZE_ROW, pid1 * BLOCK_SIZE_COL], x)
 
 
 def test(device):
@@ -49,7 +58,7 @@ def test(device):
     )
     output = torch.full([n_rows, n_cols], -1, device=device, dtype=x.dtype)
     BLOCK_SIZE_ROW = 4
-    BLOCK_SIZE_COL = 2
+    BLOCK_SIZE_COL = 4
 
     grid = lambda meta: (n_rows // BLOCK_SIZE_ROW, n_cols // BLOCK_SIZE_COL)
 
