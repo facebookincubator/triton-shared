@@ -18,17 +18,13 @@ def reduce_kernel_2d(
     BLOCK_SIZE: tl.constexpr,
 ):
     pid0 = tl.program_id(axis=0)
-    x = tl.load(
-        tl.make_block_ptr(
-            base=x_ptr,
-            shape=[n_elements * tl.num_programs(0)],
-            strides=[1],
-            offsets=[stride * pid0],
-            block_shape=[BLOCK_SIZE],
-            order=[0],
-        ),
-        boundary_check=[0],
+    x_desc = tl.make_tensor_descriptor(
+        base=x_ptr,
+        shape=[n_elements * tl.num_programs(0)],
+        strides=[1],
+        block_shape=[BLOCK_SIZE],
     )
+    x = x_desc.load([stride * pid0])
     output = triton.language.sum(x, axis=0).to(dtype=x.dtype)
     tl.store(output_ptr + pid0, output)
 

@@ -98,7 +98,7 @@ public:
       LLVM::DISubprogramFlags subprogramFlags = setSubprogramFlags(funcOp);
 
       // retained nodes
-      llvm::ArrayRef<LLVM::DINodeAttr> importedModules;
+      llvm::ArrayRef<mlir::Attribute> importedModules;
 
       // annotations
       llvm::ArrayRef<LLVM::DINodeAttr> annotations;

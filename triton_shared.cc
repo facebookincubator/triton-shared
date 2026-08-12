@@ -48,12 +48,12 @@
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/Passes.h"
 
-#include <pybind11/pybind11.h>
+#include <nanobind/nanobind.h>
 
-namespace py = pybind11;
+namespace py = nanobind;
 using namespace mlir;
 
-void init_triton_triton_shared(py::module &&m) {
+void init_triton_triton_shared(py::module_ &m) {
   m.doc() = "Python bindings to the triton-shared backend";
 
   m.def("load_dialects", [](mlir::MLIRContext &context) {
