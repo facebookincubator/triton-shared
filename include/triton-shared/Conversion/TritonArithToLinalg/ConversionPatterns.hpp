@@ -1026,10 +1026,16 @@ struct JoinConverter : public OpConversionPattern<triton::JoinOp> {
   }
 };
 
-// Lowers `tt.gather` to a `linalg.generic` that reads `indices` through the
-// identity affine map and, for each output position, extracts the gathered
-// element out of `src` via `tensor.extract` at a dynamically-computed
-// coordinate.
+// Lowers `tt.gather` to `tensor.gather`. `tt.gather`'s `indices` has the same
+// shape as the output, with only the `axis` coordinate varying per element,
+// whereas `tensor.gather` expects a coordinate tuple per output element
+// covering every gathered dimension. We bridge the two by gathering along
+// *all* source dimensions: a coordinate tensor of shape
+// `indicesShape ++ [rank]` is built where the `axis` slot holds `indices`
+// (cast to index) and every other slot `d` holds that element's own index
+// along dimension `d` (an identity/iota broadcast). With every dimension
+// listed in `gather_dims`, the rank-reduced result shape collapses to exactly
+// `indicesShape`, matching `tt.gather`'s output shape.
 struct GatherConverter : public OpConversionPattern<triton::GatherOp> {
   using OpConversionPattern<triton::GatherOp>::OpConversionPattern;
 
@@ -1050,43 +1056,62 @@ struct GatherConverter : public OpConversionPattern<triton::GatherOp> {
 
     int64_t axis = op.getAxis();
     int64_t rank = idxType.getRank();
+    ArrayRef<int64_t> idxShape = idxType.getShape();
+    Type indexElemType = rewriter.getIndexType();
 
-    // indices and the output share the same shape, so both use the identity
-    // map; src is captured below rather than driven through an ins() operand.
-    SmallVector<AffineMap> indexingMaps(
-        /*indices*/ 1 + /*output*/ 1,
-        rewriter.getMultiDimIdentityMap(rank));
+    SmallVector<int64_t> coordsShape(idxShape.begin(), idxShape.end());
+    coordsShape.push_back(rank);
+    Value coords =
+        tensor::EmptyOp::create(rewriter, loc, coordsShape, indexElemType);
 
-    Value init = tensor::EmptyOp::create(rewriter, loc, resType.getShape(),
-                                         resType.getElementType());
+    auto idxIndexType = RankedTensorType::get(idxShape, indexElemType);
+    Value axisComponent =
+        arith::IndexCastOp::create(rewriter, loc, idxIndexType, indices);
 
-    auto linalgOp = linalg::GenericOp::create(
-        rewriter, loc, op->getResultTypes(), ValueRange{indices},
-        ValueRange{init}, indexingMaps, getNParallelLoopsAttrs(rank),
-        [&](OpBuilder &nestedBuilder, Location nestedLoc,
-            ValueRange blockArgs) {
-          Value idxScalar = blockArgs[0];
-          Value idxAsIndex = arith::IndexCastOp::create(
-              nestedBuilder, nestedLoc, nestedBuilder.getIndexType(),
-              idxScalar);
+    SmallVector<OpFoldResult> offsets(rank + 1, rewriter.getIndexAttr(0));
+    SmallVector<OpFoldResult> strides(rank + 1, rewriter.getIndexAttr(1));
+    SmallVector<OpFoldResult> sizes;
+    sizes.reserve(rank + 1);
+    for (int64_t dim : idxShape)
+      sizes.push_back(rewriter.getIndexAttr(dim));
+    sizes.push_back(rewriter.getIndexAttr(1));
 
-          SmallVector<Value> coords;
-          coords.reserve(rank);
-          for (int64_t dim = 0; dim < rank; ++dim) {
-            if (dim == axis) {
-              coords.push_back(idxAsIndex);
-            } else {
-              coords.push_back(
-                  linalg::IndexOp::create(nestedBuilder, nestedLoc, dim));
-            }
-          }
+    SmallVector<AffineMap> iotaIndexingMaps(
+        1, rewriter.getMultiDimIdentityMap(rank));
 
-          Value gathered =
-              tensor::ExtractOp::create(nestedBuilder, nestedLoc, src, coords);
-          linalg::YieldOp::create(nestedBuilder, nestedLoc, gathered);
-        });
+    for (int64_t dim = 0; dim < rank; ++dim) {
+      Value component;
+      if (dim == axis) {
+        component = axisComponent;
+      } else {
+        Value iotaInit =
+            tensor::EmptyOp::create(rewriter, loc, idxShape, indexElemType);
+        auto iotaOp = linalg::GenericOp::create(
+            rewriter, loc, TypeRange{iotaInit.getType()}, ValueRange{},
+            ValueRange{iotaInit}, iotaIndexingMaps,
+            getNParallelLoopsAttrs(rank),
+            [&](OpBuilder &nestedBuilder, Location nestedLoc, ValueRange) {
+              Value idx =
+                  linalg::IndexOp::create(nestedBuilder, nestedLoc, dim);
+              linalg::YieldOp::create(nestedBuilder, nestedLoc, idx);
+            });
+        component = iotaOp.getResult(0);
+      }
 
-    rewriter.replaceOp(op, linalgOp->getResults());
+      offsets.back() = rewriter.getIndexAttr(dim);
+      coords = tensor::InsertSliceOp::create(rewriter, loc, component, coords,
+                                             offsets, sizes, strides);
+    }
+
+    SmallVector<int64_t> gatherDims;
+    gatherDims.reserve(rank);
+    for (int64_t dim = 0; dim < rank; ++dim)
+      gatherDims.push_back(dim);
+
+    auto gatherOp = tensor::GatherOp::create(
+        rewriter, loc, resType, src, coords, ArrayRef<int64_t>(gatherDims));
+
+    rewriter.replaceOp(op, gatherOp);
     return success();
   }
 };

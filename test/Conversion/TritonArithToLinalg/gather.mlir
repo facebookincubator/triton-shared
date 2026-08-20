@@ -10,15 +10,18 @@ module {
 // CHECK-LABEL:   func.func @gather_axis1(
 // CHECK-SAME:                            %[[SRC:.*]]: tensor<8x16xf32>,
 // CHECK-SAME:                            %[[INDICES:.*]]: tensor<8x16xi32>) -> tensor<8x16xf32> {
-// CHECK:           %[[EMPTY:.*]] = tensor.empty() : tensor<8x16xf32>
-// CHECK:           %[[GENERIC:.*]] = linalg.generic {indexing_maps = [#{{.*}}, #{{.*}}], iterator_types = ["parallel", "parallel"]} ins(%[[INDICES]] : tensor<8x16xi32>) outs(%[[EMPTY]] : tensor<8x16xf32>) {
-// CHECK:           ^bb0(%[[IDX:.*]]: i32, %{{.*}}: f32):
-// CHECK:             %[[IDX_CAST:.*]] = arith.index_cast %[[IDX]] : i32 to index
+// CHECK:           %[[COORDS_INIT:.*]] = tensor.empty() : tensor<8x16x2xindex>
+// CHECK:           %[[IDX_CAST:.*]] = arith.index_cast %[[INDICES]] : tensor<8x16xi32> to tensor<8x16xindex>
+// CHECK:           %[[IOTA_INIT0:.*]] = tensor.empty() : tensor<8x16xindex>
+// CHECK:           %[[IOTA0:.*]] = linalg.generic {indexing_maps = [#{{.*}}], iterator_types = ["parallel", "parallel"]} outs(%[[IOTA_INIT0]] : tensor<8x16xindex>) {
+// CHECK:           ^bb0(%{{.*}}: index):
 // CHECK:             %[[ROW:.*]] = linalg.index 0 : index
-// CHECK:             %[[EXTRACTED:.*]] = tensor.extract %[[SRC]]{{\[}}%[[ROW]], %[[IDX_CAST]]] : tensor<8x16xf32>
-// CHECK:             linalg.yield %[[EXTRACTED]] : f32
-// CHECK:           } -> tensor<8x16xf32>
-// CHECK:           return %[[GENERIC]] : tensor<8x16xf32>
+// CHECK:             linalg.yield %[[ROW]] : index
+// CHECK:           } -> tensor<8x16xindex>
+// CHECK:           %[[COORDS0:.*]] = tensor.insert_slice %[[IOTA0]] into %[[COORDS_INIT]][0, 0, 0] [8, 16, 1] [1, 1, 1] : tensor<8x16xindex> into tensor<8x16x2xindex>
+// CHECK:           %[[COORDS1:.*]] = tensor.insert_slice %[[IDX_CAST]] into %[[COORDS0]][0, 0, 1] [8, 16, 1] [1, 1, 1] : tensor<8x16xindex> into tensor<8x16x2xindex>
+// CHECK:           %[[GATHER:.*]] = tensor.gather %[[SRC]]{{\[}}%[[COORDS1]]] gather_dims([0, 1]) : (tensor<8x16xf32>, tensor<8x16x2xindex>) -> tensor<8x16xf32>
+// CHECK:           return %[[GATHER]] : tensor<8x16xf32>
 // CHECK:         }
 
 // -----
@@ -33,13 +36,16 @@ module {
 // CHECK-LABEL:   func.func @gather_axis0(
 // CHECK-SAME:                            %[[SRC:.*]]: tensor<8x16xf32>,
 // CHECK-SAME:                            %[[INDICES:.*]]: tensor<8x16xi32>) -> tensor<8x16xf32> {
-// CHECK:           %[[EMPTY:.*]] = tensor.empty() : tensor<8x16xf32>
-// CHECK:           %[[GENERIC:.*]] = linalg.generic {indexing_maps = [#{{.*}}, #{{.*}}], iterator_types = ["parallel", "parallel"]} ins(%[[INDICES]] : tensor<8x16xi32>) outs(%[[EMPTY]] : tensor<8x16xf32>) {
-// CHECK:           ^bb0(%[[IDX:.*]]: i32, %{{.*}}: f32):
-// CHECK:             %[[IDX_CAST:.*]] = arith.index_cast %[[IDX]] : i32 to index
+// CHECK:           %[[COORDS_INIT:.*]] = tensor.empty() : tensor<8x16x2xindex>
+// CHECK:           %[[IDX_CAST:.*]] = arith.index_cast %[[INDICES]] : tensor<8x16xi32> to tensor<8x16xindex>
+// CHECK:           %[[COORDS0:.*]] = tensor.insert_slice %[[IDX_CAST]] into %[[COORDS_INIT]][0, 0, 0] [8, 16, 1] [1, 1, 1] : tensor<8x16xindex> into tensor<8x16x2xindex>
+// CHECK:           %[[IOTA_INIT1:.*]] = tensor.empty() : tensor<8x16xindex>
+// CHECK:           %[[IOTA1:.*]] = linalg.generic {indexing_maps = [#{{.*}}], iterator_types = ["parallel", "parallel"]} outs(%[[IOTA_INIT1]] : tensor<8x16xindex>) {
+// CHECK:           ^bb0(%{{.*}}: index):
 // CHECK:             %[[COL:.*]] = linalg.index 1 : index
-// CHECK:             %[[EXTRACTED:.*]] = tensor.extract %[[SRC]]{{\[}}%[[IDX_CAST]], %[[COL]]] : tensor<8x16xf32>
-// CHECK:             linalg.yield %[[EXTRACTED]] : f32
-// CHECK:           } -> tensor<8x16xf32>
-// CHECK:           return %[[GENERIC]] : tensor<8x16xf32>
+// CHECK:             linalg.yield %[[COL]] : index
+// CHECK:           } -> tensor<8x16xindex>
+// CHECK:           %[[COORDS1:.*]] = tensor.insert_slice %[[IOTA1]] into %[[COORDS0]][0, 0, 1] [8, 16, 1] [1, 1, 1] : tensor<8x16xindex> into tensor<8x16x2xindex>
+// CHECK:           %[[GATHER:.*]] = tensor.gather %[[SRC]]{{\[}}%[[COORDS1]]] gather_dims([0, 1]) : (tensor<8x16xf32>, tensor<8x16x2xindex>) -> tensor<8x16xf32>
+// CHECK:           return %[[GATHER]] : tensor<8x16xf32>
 // CHECK:         }
