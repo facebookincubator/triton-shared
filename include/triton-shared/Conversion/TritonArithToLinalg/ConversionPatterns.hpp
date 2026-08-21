@@ -1111,6 +1111,13 @@ struct GatherConverter : public OpConversionPattern<triton::GatherOp> {
     auto gatherOp = tensor::GatherOp::create(
         rewriter, loc, resType, src, coords, ArrayRef<int64_t>(gatherDims));
 
+    // Mark this tensor.gather as tt.gather-derived so the
+    // tensor-gather-to-linalg pass can safely rewrite it back to the
+    // simpler, single-axis linalg.generic form without having to infer
+    // provenance from IR shape alone.
+    gatherOp->setAttr(kTensorGatherFromTtGatherAxisAttrName,
+                      rewriter.getI64IntegerAttr(axis));
+
     rewriter.replaceOp(op, gatherOp);
     return success();
   }

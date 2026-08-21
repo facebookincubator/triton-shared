@@ -30,6 +30,7 @@ add_triton_library(TritonToLinalgExperimental
   TritonSharedUtils
 
   TritonArithToLinalg
+  TensorGatherToLinalg
   StructuredToMemref
   TritonToStructured
   TritonToUnstructured

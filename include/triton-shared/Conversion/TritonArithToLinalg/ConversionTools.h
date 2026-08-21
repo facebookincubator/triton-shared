@@ -9,13 +9,15 @@
 #define TRITON_CONVERSION_TRITONARITHTOLINALG_CONVERSIONTOOLS_H
 
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
+#include "mlir/Dialect/Utils/StructuredOpsUtils.h"
 
 namespace mlir {
 namespace triton {
 
-static inline SmallVector<utils::IteratorType>
+static inline SmallVector<mlir::utils::IteratorType>
 getNParallelLoopsAttrs(unsigned n) {
-  return SmallVector<utils::IteratorType>(n, utils::IteratorType::parallel);
+  return SmallVector<mlir::utils::IteratorType>(
+      n, mlir::utils::IteratorType::parallel);
 }
 
 static inline SmallVector<int64_t> getBroadcastDims(RankedTensorType src,
