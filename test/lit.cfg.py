@@ -19,7 +19,7 @@ from lit.llvm.subst import FindTool, ToolSubst
 # name: The name of this test suite
 config.name = 'TRITON-SHARED'
 
-config.test_format = lit.formats.ShTest(not llvm_config.use_lit_shell)
+config.test_format = lit.formats.ShTest(execute_external=False, force_execute_external=not llvm_config.use_lit_shell)
 
 # suffixes: A list of file extensions to treat as test files.
 config.suffixes = ['.mlir', '.ll']
