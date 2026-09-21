@@ -7,6 +7,7 @@
 
 #include "mlir/Dialect/Ptr/IR/PtrDialect.h"
 #include "triton-shared/Conversion/StructuredToMemref/StructuredToMemref.h"
+#include "triton-shared/Conversion/TensorGatherToLinalg/TensorGatherToLinalg.h"
 #include "triton-shared/Conversion/TritonArithToLinalg/TritonArithToLinalg.h"
 #include "triton-shared/Conversion/TritonPtrToMemref/TritonPtrToMemref.h"
 #include "triton-shared/Conversion/TritonToLinalgExperimental/CollapseShape.h"
@@ -64,6 +65,7 @@ public:
 
     pm.addPass(createTritonToUnstructuredPass());
     pm.addPass(createTritonArithToLinalgPass(/*tensorPtrToLinalg=*/true));
+    pm.addPass(createTensorGatherToLinalgPass());
 
     pm.addPass(createStructuredToMemrefPass());
     pm.addPass(createUnstructuredToMemrefPass());
