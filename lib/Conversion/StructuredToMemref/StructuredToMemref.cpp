@@ -44,6 +44,7 @@ using namespace mlir;
 
 static const std::string WRAP_SIDE_BY_SIDE = "wrap_side_by_side";
 static const std::string WRAP_STACKED = "wrap_stacked";
+static const std::string WRAP_1D = "wrap_1d";
 
 static memref::SubViewOp getSubview(int rank, ArrayRef<OpFoldResult> dims,
                                     Value source, Location loc, OpBuilder &b) {
@@ -139,6 +140,29 @@ static OpFoldResult accumulateTargetOffset(Location loc,
     targetOffset = addOFRs(targetOffset, offset, loc, b);
   }
   return targetOffset;
+}
+
+// Shared split-pointer arithmetic for all circular-buffer wrap cases.
+// Returns {xAddr, d1, d2} where:
+//   xAddr = targetOffset % modN        (start position within the wrapping
+//           period, in ADDRESS units; callers use it to derive their own
+//           chunk offsets — see below)
+//   xElem = xAddr / stride             (same position in ELEMENT units)
+//   elemM = modN / stride              (modulo period, in elements)
+//   d1    = min(xElem + blockSz, elemM) - xElem  (elements before boundary)
+//   d2    = blockSz - d1                          (elements after wrap, may 0)
+//
+static std::tuple<Value, Value, Value>
+computeWrapSizes(Value targetOffset, Value modN, Value blockSz, Value stride,
+                 Location loc, OpBuilder &rewriter) {
+  Value xAddr = arith::RemSIOp::create(rewriter, loc, targetOffset, modN);
+  Value xElem = arith::DivSIOp::create(rewriter, loc, xAddr, stride);
+  Value elemM = arith::DivSIOp::create(rewriter, loc, modN, stride);
+  Value nextOff = arith::AddIOp::create(rewriter, loc, xElem, blockSz);
+  Value clampedOff = arith::MinSIOp::create(rewriter, loc, nextOff, elemM);
+  Value d1 = arith::SubIOp::create(rewriter, loc, clampedOff, xElem);
+  Value d2 = arith::SubIOp::create(rewriter, loc, blockSz, d1);
+  return {xAddr, d1, d2};
 }
 
 static Value rewriteGatherScatterPtrElement(
@@ -299,29 +323,29 @@ private:
 
     Value modN = ofrToIndexValue(op.getMixedShape()[1], loc, rewriter);
 
-    Value x = arith::RemSIOp::create(rewriter, loc, targetOffset, modN);
-    Value y = arith::SubIOp::create(rewriter, loc, targetOffset, x);
-
     SmallVector<Value> strideVals =
         ofrsToIndexValues(op.getMixedStrides(), loc, rewriter);
 
-    // First chunk
-    Value nextOffset = arith::AddIOp::create(rewriter, loc, x, colSize);
-    Value clampedOffset =
-        arith::MinSIOp::create(rewriter, loc, nextOffset, modN);
-    Value d1 = arith::SubIOp::create(rewriter, loc, clampedOffset, x);
+    // The wrapping dimension is the column (dim 1); its stride scales both
+    // targetOffset's contribution and modN (see computeWrapSizes doc comment).
+    // computeWrapSizes returns only the split sizes + xAddr; the 2D chunk
+    // offsets are the plain targetOffset (chunk1) and the row base
+    // targetOffset - xAddr (chunk2), which are always valid for the supported
+    // single-period side-by-side case (multi-period is unsupported here).
+    auto [xAddr, d1, d2] = computeWrapSizes(
+        targetOffset, modN, colSize, strideVals[1], loc, rewriter);
+    Value rowBase = arith::SubIOp::create(rewriter, loc, targetOffset, xAddr);
     SmallVector<Value> sizes1{rowSize, d1};
 
     auto cast1 = memref::ReinterpretCastOp::create(
         rewriter, loc, resultType, adaptor.getBase(), targetOffset, sizes1,
         strideVals);
 
-    // Second chunk
-    Value d2 = arith::SubIOp::create(rewriter, loc, colSize, d1);
     SmallVector<Value> sizes2{rowSize, d2};
 
     auto cast2 = memref::ReinterpretCastOp::create(
-        rewriter, loc, resultType, adaptor.getBase(), y, sizes2, strideVals);
+        rewriter, loc, resultType, adaptor.getBase(), rowBase, sizes2,
+        strideVals);
 
     return {cast1, cast2};
   }
@@ -456,33 +480,119 @@ private:
     return {cast1, cast2};
   }
 
+  // Handles 1D circular-buffer wrap-around: ptr[stride * (i % N)] where the
+  // tile [startOffset, startOffset+XBLOCK) may straddle the modulo boundary.
+  //
+  // `stride` is the element stride of the wrapping dimension (usually 1, but
+  // e.g. 3 for an index of the form `y0 + 3*(x1 % 32)` — see
+  // PtrAnalysis::mulState, which scales offset/stride/shape together when a
+  // modulo'd index is multiplied by a constant). See computeWrapSizes for 
+  // the element-unit offset/size math this now shares with the 2D 
+  // side-by-side case.
+  //
+  //   elemOff = startOffset / stride  (start position, in elements)
+  //   x       = elemOff % N            (real column the tile starts at —
+  //             equal to elemOff only when elemOff < N; a later tile can
+  //             start on or past a wrap boundary, elemOff >= N, in which
+  //             case x < elemOff and `startOffset` is NOT a valid chunk1
+  //             address — see computeWrapSizes for why offset1 must be
+  //             re-derived from x, not reused as raw startOffset)
+  //   d1      = min(x + XBLOCK, N) - x  (elements before wrap)
+  //   d2      = XBLOCK - d1              (elements after wrap, from 0)
+  //
+  //   chunk1: base[offset1 .. offset1 + d1*stride)   stride `stride`
+  //   chunk2: base[offset2 .. offset2 + d2*stride)    stride `stride`
+  //           (i.e. from the start of the period in flat memory)
+  //
+  // When d2 == 0 (no wrap, common case) chunk2 is a zero-size memref; the
+  // downstream CopyOp over it is a no-op.
+  std::pair<memref::ReinterpretCastOp, memref::ReinterpretCastOp>
+  create1DCastOps(tts::MakeTensorPtrOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const {
+    auto loc = op->getLoc();
+
+    auto resultType = getResultMemrefType(
+        op, /* offset */ ShapedType::kDynamic,
+        /* staticStrides */ SmallVector<int64_t>{ShapedType::kDynamic},
+        /* resultShape */ SmallVector<int64_t>{ShapedType::kDynamic});
+
+    auto targetOffset = ofrToIndexValue(
+        accumulateTargetOffset(op.getLoc(), op.getMixedOffsets(), rewriter),
+        loc, rewriter);
+
+    // N = modulo bound stored in shape[0] by PtrAnalysis::visitOperandRem
+    // (scaled by stride if the modulo'd index was also multiplied — see
+    // PtrAnalysis::mulState).
+    Value modN = ofrToIndexValue(op.getMixedShape()[0], loc, rewriter);
+
+    Value blockSz = arith::ConstantOp::create(
+        rewriter, loc, rewriter.getIndexAttr(op.getSizes()[0]));
+
+    Value stride = ofrToIndexValue(op.getMixedStrides()[0], loc, rewriter);
+
+    auto [xAddr, d1, d2] =
+        computeWrapSizes(targetOffset, modN, blockSz, stride, loc, rewriter);
+
+    // 1D has no other dimension, so the "rest" offset (contribution of dims
+    // besides the wrapping one) is 0: chunk1 starts at the real in-buffer
+    // address xAddr = targetOffset % modN (which correctly wraps a tile that
+    // starts a whole period past the buffer start — where raw targetOffset
+    // would read out of bounds), and chunk2 restarts at the period base 0.
+    Value zero =
+        arith::ConstantOp::create(rewriter, loc, rewriter.getIndexAttr(0));
+
+    // chunk1: [xAddr, xAddr + d1*stride)
+    SmallVector<Value> sizes1{d1};
+    SmallVector<Value> strides1{stride};
+    auto cast1 = memref::ReinterpretCastOp::create(
+        rewriter, loc, resultType, adaptor.getBase(),
+        xAddr, sizes1, strides1);
+
+    // chunk2: [0, 0 + d2*stride)
+    SmallVector<Value> sizes2{d2};
+    auto cast2 = memref::ReinterpretCastOp::create(
+        rewriter, loc, resultType, adaptor.getBase(),
+        zero, sizes2, strides1);
+
+    return {cast1, cast2};
+  }
+
   LogicalResult rewriteSplitPtr(tts::MakeTensorPtrOp op, OpAdaptor adaptor,
                                 ConversionPatternRewriter &rewriter) const {
     auto parentShape = op.getStaticShape();
-    assert(parentShape.size() == 2 &&
-           "Only support split pointer for 2D tensors only");
     SmallVector<Value> casts;
     StringRef wrapType;
 
-    // For split pointers, a split dimension is either a dynamic or a non-zero
-    // value. The other dimension must be zero.
-    auto isSplitDimension = [](int64_t dim) {
-      return dim == ShapedType::kDynamic || dim != 0;
-    };
-
-    if (isSplitDimension(parentShape[0])) {
-      // Stacked case
-      assert(parentShape[1] == 0);
-      auto [cast1, cast2] = createStackedCastOps(op, adaptor, rewriter);
+    if (parentShape.size() == 1) {
+      // 1D circular-buffer wrap-around: ptr[i % N]
+      // shape[0] carries N (set by PtrAnalysis::visitOperandRem for rank-1).
+      auto [cast1, cast2] = create1DCastOps(op, adaptor, rewriter);
       casts = {cast1.getResult(), cast2.getResult()};
-      wrapType = WRAP_STACKED;
-    } else if (isSplitDimension(parentShape[1])) {
-      assert(parentShape[0] == 0);
-      auto [cast1, cast2] = createSideBySideCastOps(op, adaptor, rewriter);
-      casts = {cast1.getResult(), cast2.getResult()};
-      wrapType = WRAP_SIDE_BY_SIDE;
+      wrapType = WRAP_1D;
     } else {
-      llvm_unreachable("Unexpected split pointer shape");
+      assert(parentShape.size() == 2 &&
+             "Only support split pointer for 1D and 2D tensors");
+
+      // For split pointers, a split dimension is either a dynamic or a non-zero
+      // value. The other dimension must be zero.
+      auto isSplitDimension = [](int64_t dim) {
+        return dim == ShapedType::kDynamic || dim != 0;
+      };
+
+      if (isSplitDimension(parentShape[0])) {
+        // Stacked case
+        assert(parentShape[1] == 0);
+        auto [cast1, cast2] = createStackedCastOps(op, adaptor, rewriter);
+        casts = {cast1.getResult(), cast2.getResult()};
+        wrapType = WRAP_STACKED;
+      } else if (isSplitDimension(parentShape[1])) {
+        assert(parentShape[0] == 0);
+        auto [cast1, cast2] = createSideBySideCastOps(op, adaptor, rewriter);
+        casts = {cast1.getResult(), cast2.getResult()};
+        wrapType = WRAP_SIDE_BY_SIDE;
+      } else {
+        llvm_unreachable("Unexpected split pointer shape");
+      }
     }
 
     auto combinedCast = UnrealizedConversionCastOp::create(
@@ -643,6 +753,34 @@ private:
     memref::CopyOp::create(rewriter, loc, block2, block2Dst);
   }
 
+  // 1D wrap copy: block1 = [offset1, offset1+d1), fills dst[0..d1).
+  //               block2 = wrapped part [offset2, offset2+d2), fills dst[d1..XBLOCK).
+  // When d2 == 0 (no wrap) block2 has size 0 and the second CopyOp is a no-op.
+  void create1DCopies(Value block1, Value block2, Value dst, Location loc,
+                      ConversionPatternRewriter &rewriter) const {
+    auto zero =
+        arith::ConstantOp::create(rewriter, loc, rewriter.getIndexAttr(0));
+    auto one =
+        arith::ConstantOp::create(rewriter, loc, rewriter.getIndexAttr(1));
+
+    Value d1 = memref::DimOp::create(rewriter, loc, block1, 0);
+    Value d2 = memref::DimOp::create(rewriter, loc, block2, 0);
+
+    // dst[0 : d1]  <- block1
+    auto block1Dst = memref::SubViewOp::create(rewriter, loc, dst,
+                                               ValueRange{zero},
+                                               ValueRange{d1},
+                                               ValueRange{one});
+    // dst[d1 : d1 + d2]  <- block2
+    auto block2Dst = memref::SubViewOp::create(rewriter, loc, dst,
+                                               ValueRange{d1},
+                                               ValueRange{d2},
+                                               ValueRange{one});
+
+    memref::CopyOp::create(rewriter, loc, block1, block1Dst);
+    memref::CopyOp::create(rewriter, loc, block2, block2Dst);
+  }
+
   memref::SubViewOp createSubview(Value src, ArrayRef<OpFoldResult> offsets,
                                   ArrayRef<OpFoldResult> sizes,
                                   ArrayRef<OpFoldResult> strides, Location loc,
@@ -695,6 +833,25 @@ private:
     return {sv1, sv2};
   }
 
+  // 1D masked subviews: each chunk is already sized to d1/d2 by the cast ops,
+  // so we read the actual dim and clip to the mask dimension.
+  std::pair<memref::SubViewOp, memref::SubViewOp>
+  get1DSubviews(ArrayRef<OpFoldResult> dims, Value block1, Value block2,
+                Location loc, ConversionPatternRewriter &rewriter) const {
+    // dims[0] is the mask size for the whole 1D block.
+    // chunk1 contributes min(d1, maskSize) elements; chunk2 the remainder.
+    // We use the actual sizes already baked into the ReinterpretCastOps (d1/d2)
+    // directly, clipped by the mask dimension via SubViewOp.
+    OpFoldResult d1 = memref::DimOp::create(rewriter, loc, block1, 0).getResult();
+    OpFoldResult d2 = memref::DimOp::create(rewriter, loc, block2, 0).getResult();
+
+    SmallVector<OpFoldResult> offsets{rewriter.getIndexAttr(0)};
+    SmallVector<OpFoldResult> strides{rewriter.getIndexAttr(1)};
+    auto sv1 = createSubview(block1, offsets, {d1}, strides, loc, rewriter);
+    auto sv2 = createSubview(block2, offsets, {d2}, strides, loc, rewriter);
+    return {sv1, sv2};
+  }
+
   LogicalResult
   rewriteStructuredLoad(tts::LoadOp op, OpAdaptor adaptor,
                         ConversionPatternRewriter &rewriter) const {
@@ -715,7 +872,8 @@ private:
 
     auto ptrDefiningOp = ptr.getDefiningOp();
     if (ptrDefiningOp->hasAttr(WRAP_SIDE_BY_SIDE) ||
-        ptrDefiningOp->hasAttr(WRAP_STACKED)) {
+        ptrDefiningOp->hasAttr(WRAP_STACKED) ||
+        ptrDefiningOp->hasAttr(WRAP_1D)) {
 
       auto unrealizedCast = cast<UnrealizedConversionCastOp>(ptrDefiningOp);
       auto memrefs = unrealizedCast.getOperands();
@@ -727,6 +885,8 @@ private:
         createSideBySideCopies(block1, block2, alloc, loc, rewriter);
       } else if (unrealizedCast->hasAttr(WRAP_STACKED)) {
         createStackedCopies(block1, block2, alloc, loc, rewriter);
+      } else if (unrealizedCast->hasAttr(WRAP_1D)) {
+        create1DCopies(block1, block2, alloc, loc, rewriter);
       } else {
         llvm_unreachable("unexpected wraparound type");
       }
@@ -765,7 +925,8 @@ private:
 
     auto ptrDefiningOp = ptr.getDefiningOp();
     if (ptrDefiningOp->hasAttr(WRAP_SIDE_BY_SIDE) ||
-        ptrDefiningOp->hasAttr(WRAP_STACKED)) {
+        ptrDefiningOp->hasAttr(WRAP_STACKED) ||
+        ptrDefiningOp->hasAttr(WRAP_1D)) {
 
       auto unrealizedCast = cast<UnrealizedConversionCastOp>(ptrDefiningOp);
 
@@ -782,6 +943,10 @@ private:
         auto [subview1, subview2] =
             getStackedSubviews(mixedDims, block1, block2, loc, rewriter);
         createStackedCopies(subview1, subview2, alloc, loc, rewriter);
+      } else if (unrealizedCast->hasAttr(WRAP_1D)) {
+        auto [subview1, subview2] =
+            get1DSubviews(mixedDims, block1, block2, loc, rewriter);
+        create1DCopies(subview1, subview2, alloc, loc, rewriter);
       } else {
         llvm_unreachable("unexpected wraparound type");
       }
@@ -1122,6 +1287,75 @@ public:
     auto ptr = adaptor.getPtr();
     auto storeValue = op.getValue();
     auto rank = cast<RankedTensorType>(storeValue.getType()).getRank();
+
+    // Handle 1D circular-buffer wrap-around store: store into two contiguous
+    // segments that together span the block.
+    auto ptrDefiningOp = ptr.getDefiningOp();
+    if (ptrDefiningOp && ptrDefiningOp->hasAttr(WRAP_1D)) {
+      auto unrealizedCast = cast<UnrealizedConversionCastOp>(ptrDefiningOp);
+      auto memrefs = unrealizedCast.getOperands();
+      assert(memrefs.size() == 2);
+      Value block1 = memrefs[0];
+      Value block2 = memrefs[1];
+
+      Value d1 = memref::DimOp::create(rewriter, loc, block1, 0);
+      Value d2 = memref::DimOp::create(rewriter, loc, block2, 0);
+      Value zero =
+          arith::ConstantOp::create(rewriter, loc, rewriter.getIndexAttr(0));
+      Value one =
+          arith::ConstantOp::create(rewriter, loc, rewriter.getIndexAttr(1));
+
+      if (op.hasMask()) {
+        auto mixedDims = op.getMixedMaskDims();
+        // Clip store slices to the mask size (dims[0] for the 1D case).
+        // Use d1/d2 directly from the cast ops since they are already sized.
+        auto slice1 = tensor::ExtractSliceOp::create(
+            rewriter, loc, storeValue,
+            SmallVector<OpFoldResult>{rewriter.getIndexAttr(0)},
+            SmallVector<OpFoldResult>{OpFoldResult(d1)},
+            SmallVector<OpFoldResult>{rewriter.getIndexAttr(1)});
+        auto dst1Subview = memref::SubViewOp::create(
+            rewriter, loc, block1, ValueRange{zero}, ValueRange{d1},
+            ValueRange{one});
+        auto store1 = bufferization::MaterializeInDestinationOp::create(
+            rewriter, loc, slice1, dst1Subview);
+        store1.setWritable(true);
+
+        auto slice2 = tensor::ExtractSliceOp::create(
+            rewriter, loc, storeValue,
+            SmallVector<OpFoldResult>{OpFoldResult(d1)},
+            SmallVector<OpFoldResult>{OpFoldResult(d2)},
+            SmallVector<OpFoldResult>{rewriter.getIndexAttr(1)});
+        auto dst2Subview = memref::SubViewOp::create(
+            rewriter, loc, block2, ValueRange{zero}, ValueRange{d2},
+            ValueRange{one});
+        auto store2 = bufferization::MaterializeInDestinationOp::create(
+            rewriter, loc, slice2, dst2Subview);
+        store2.setWritable(true);
+      } else {
+        // Unmasked: store first d1 elements to chunk1, next d2 to chunk2.
+        auto slice1 = tensor::ExtractSliceOp::create(
+            rewriter, loc, storeValue,
+            SmallVector<OpFoldResult>{rewriter.getIndexAttr(0)},
+            SmallVector<OpFoldResult>{OpFoldResult(d1)},
+            SmallVector<OpFoldResult>{rewriter.getIndexAttr(1)});
+        auto store1 = bufferization::MaterializeInDestinationOp::create(
+            rewriter, loc, slice1, block1);
+        store1.setWritable(true);
+
+        auto slice2 = tensor::ExtractSliceOp::create(
+            rewriter, loc, storeValue,
+            SmallVector<OpFoldResult>{OpFoldResult(d1)},
+            SmallVector<OpFoldResult>{OpFoldResult(d2)},
+            SmallVector<OpFoldResult>{rewriter.getIndexAttr(1)});
+        auto store2 = bufferization::MaterializeInDestinationOp::create(
+            rewriter, loc, slice2, block2);
+        store2.setWritable(true);
+      }
+
+      rewriter.eraseOp(op);
+      return success();
+    }
 
     if (op.hasMask()) {
       auto mixedDims = op.getMixedMaskDims();
