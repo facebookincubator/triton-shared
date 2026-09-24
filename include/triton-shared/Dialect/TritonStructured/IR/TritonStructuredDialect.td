@@ -12,6 +12,7 @@ include "mlir/IR/OpBase.td"
 include "triton/Dialect/Triton/IR/TritonTypes.td"
 include "triton/Dialect/Triton/IR/TritonAttrDefs.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
+include "triton/Dialect/Triton/IR/TritonAttrDefs.td"
 
 def Triton_Structured_Dialect : Dialect {
   let name = "tts";
@@ -354,6 +355,8 @@ def TTS_LoadOp : TTS_Op<"load", [
     }
   }];
 
+  let hasFolder = 1;
+
   // TODO
   //let hasCustomAssemblyFormat = 1;
   //let hasVerifier = 1;
@@ -385,9 +388,95 @@ def TTS_StoreOp : TTS_Op<"store", [
     }
   }];
 
+  let hasFolder = 1;
+
   // TODO
   //let hasCustomAssemblyFormat = 1;
   //let hasVerifier = 1;
+}
+
+def TTS_AtomicRMWOp : TTS_Op<"atomic_rmw", [
+  MemoryEffects<[MemWrite, MemRead]>
+]> {
+  let summary = "atomic read-modify-write";
+
+  let description = [{
+    Load the old value at $ptr, apply $atomic_rmw_op with $val, store the
+    result back to $ptr, and return the old value.
+  }];
+
+  let arguments = (ins
+    TT_AtomicRMWAttr:$atomic_rmw_op,
+    TT_PtrLike:$ptr,
+    TT_Tensor:$val,
+    Variadic<Index>:$mask_dims,
+    DenseI64ArrayAttr:$static_mask_dims,
+    TT_MemSemanticAttr:$sem,
+    TT_MemSyncScopeAttr:$scope
+  );
+
+  let results = (outs TT_Tensor:$result);
+
+  let builders = [
+    OpBuilder<(ins "triton::RMWOp":$atomic_rmw_op, "Value":$ptr, "Value":$value, "ArrayRef<OpFoldResult>":$dims, "triton::MemSemantic":$sem, "triton::MemSyncScope":$scope)>,
+  ];
+
+  let extraClassDeclaration = [{
+    /// Return a vector of all the static or dynamic fields
+    SmallVector<OpFoldResult> getMixedMaskDims() {
+      Builder b(getContext());
+      return ::mlir::getMixedValues(getStaticMaskDims(), getMaskDims(), b);
+    }
+
+    bool hasMask() {
+      return !getMixedMaskDims().empty();
+    }
+  }];
+
+  let hasFolder = 1;
+
+  // Explicitly list $atomic_rmw_op, $sem, and $scope rather than relying on
+  // attr-dict so they're printed as strings rather than opaque integers.
+  let assemblyFormat = [{
+    $atomic_rmw_op `,` $sem `,` $scope `,` $ptr `,` $val (`,` $mask_dims^)? attr-dict `:`
+    functional-type(operands, $result)
+  }];
+
+  let hasVerifier = 1;
+}
+
+def TTS_AtomicCASOp : TTS_Op<"atomic_cas", [
+  MemoryEffects<[MemWrite, MemRead]>
+]> {
+  let summary = "atomic compare-and-swap";
+
+  let description = [{
+    Compare $cmp with the old value at $ptr. Store $val when they match,
+    otherwise keep the old value, and return the old value.
+  }];
+
+  let arguments = (ins
+    TT_PtrLike:$ptr,
+    TT_Tensor:$cmp,
+    TT_Tensor:$val,
+    TT_MemSemanticAttr:$sem,
+    TT_MemSyncScopeAttr:$scope
+  );
+
+  let results = (outs TT_Tensor:$result);
+
+  let builders = [
+    OpBuilder<(ins "triton::MemSemantic":$sem, "triton::MemSyncScope":$scope, "Value":$ptr, "Value":$cmp, "Value":$val)>,
+  ];
+
+  // Explicitly list $sem and $scope rather than relying on attr-dict so
+  // they're printed as strings rather than opaque integers.
+  let assemblyFormat = [{
+    $sem `,` $scope `,` $ptr `,` $cmp `,` $val attr-dict `:`
+    functional-type(operands, $result)
+  }];
+
+  let hasVerifier = 1;
 }
 
 #endif // TRITON_STRUCTURED_DIALECT
