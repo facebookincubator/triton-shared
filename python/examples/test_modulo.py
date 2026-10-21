@@ -387,3 +387,34 @@ def test_torch_inductor_pattern():
         dtype=torch.int32)
 
     assert torch.equal(expected_out.int(), out.int())
+
+
+def test_wrap_1d(device):
+
+    @triton.jit
+    def wrap_1d_mul(weight_ptr, in_ptr, out_ptr, xnumel, N,
+                    XBLOCK: tl.constexpr):
+        xoffset = tl.program_id(0) * XBLOCK
+        xindex = xoffset + tl.arange(0, XBLOCK)[:]
+        xmask = xindex < xnumel
+        x0 = xindex % N
+        w = tl.load(weight_ptr + x0, xmask)
+        x = tl.load(in_ptr + xindex, xmask)
+        tl.store(out_ptr + xindex, w * x, xmask)
+
+    N = 8
+    xnumel = N * 4  # 32 — two full tiles each crossing the N boundary
+    XBLOCK = 16
+
+    weight = torch.arange(0, N, device=device, dtype=torch.float32)
+    inp = torch.ones(xnumel, device=device, dtype=torch.float32)
+    out = torch.zeros(xnumel, device=device, dtype=torch.float32)
+
+    grid = lambda meta: (triton.cdiv(xnumel, meta['XBLOCK']),)
+    wrap_1d_mul[grid](weight, inp, out, xnumel, N, XBLOCK=XBLOCK)
+
+    # out[i] = weight[i % N] * 1.0 = float(i % N)
+    expected = torch.tensor([float(i % N) for i in range(xnumel)],
+                            device=device,
+                            dtype=torch.float32)
+    assert torch.equal(out, expected)
