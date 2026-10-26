@@ -1775,6 +1775,13 @@ LogicalResult PtrAnalysis::rewriteLoadOp(triton::LoadOp op,
       LLVM_DEBUG(op->emitRemark("MaskAnalysis failed"));
       return failure();
     }
+    // gather_scatter_mask requires gather/scatter lowering to be enabled.
+    if (!enableMakeGatherScatterTensorPtr &&
+        !mstate.getUnstructuredMasks().empty()) {
+      LLVM_DEBUG(op->emitRemark(
+          "PtrAnalysis: unstructured load mask without legacy gather/scatter"));
+      return failure();
+    }
     ptr = applyUnstructuredMask(op, ptr, mstate, loc, builder);
     if (!ptr) {
       return failure();

@@ -1,15 +1,16 @@
 // RUN: triton-shared-opt --triton-to-structured --remove-dead-values --cse --canonicalize %s | FileCheck %s --implicit-check-not=tts.make_gather_scatter_tptr
 
-// Combining broadcast boundary masks for two dimensions leaves one side only
-// partially parsed. The load must remain elementwise-masked when that side has
-// no OpFoldResult that can be materialized as a structured mask.
+// Combining broadcast boundary masks for two dimensions. Each side is a scaled
+// range bound (0 <= 2 * x < 4, 0 <= 3 * y < 6), which MaskAnalysis parses as
+// x < 2 and y < 2, so the structured load has full 2x2 static mask extents.
 module {
 // CHECK-LABEL: tt.func public @nested_bool_and_mask_fallback(
-// CHECK-DAG:     [[OTHER:%.+]] = arith.constant dense<-128> : tensor<2x2xi8>
-// CHECK-DAG:     [[X_BOUND:%.+]] = tt.broadcast %{{.*}} : tensor<1x2xi1> -> tensor<2x2xi1>
-// CHECK-DAG:     [[Y_BOUND:%.+]] = tt.broadcast %{{.*}} : tensor<2x1xi1> -> tensor<2x2xi1>
-// CHECK:         [[MASK:%.+]] = arith.andi [[Y_BOUND]], [[X_BOUND]] : tensor<2x2xi1>
-// CHECK:         tt.load %{{.*}}, [[MASK]], [[OTHER]] : tensor<2x2x!tt.ptr<i8>>
+// CHECK-DAG:     [[STRIDE_X:%.+]] = arith.constant 2 : index
+// CHECK-DAG:     [[STRIDE_Y:%.+]] = arith.constant 3 : index
+// CHECK-DAG:     [[OTHER:%.+]] = arith.constant -128 : i8
+// CHECK:         [[PTR:%.+]] = tts.make_tptr %{{.*}} to sizes: [2, 2], strides: {{\[}}[[STRIDE_Y]], [[STRIDE_X]]{{\]}}
+// CHECK:         [[LOADED:%.+]] = "tts.load"([[PTR]], [[OTHER]]) <{operandSegmentSizes = array<i32: 1, 0, 1>, static_mask_dims = array<i64: 2, 2>}>
+// CHECK:         tt.return [[LOADED]] : tensor<2x2xi8>
   tt.func public @nested_bool_and_mask_fallback(%in: !tt.ptr<i8>) -> tensor<2x2xi8> attributes {noinline = false} {
     %cst = arith.constant dense<-128> : tensor<2x2xi8>
     %c0x = arith.constant dense<0> : tensor<1x2xi64>

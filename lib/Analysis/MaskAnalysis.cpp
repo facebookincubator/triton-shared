@@ -9,6 +9,8 @@
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/Matchers.h"
+#include "mlir/IR/TypeUtilities.h"
 #include "mlir/Support/LogicalResult.h"
 
 #include "triton-shared/Analysis/OpFoldResultUtils.h"
@@ -21,8 +23,10 @@
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/LogicalResult.h"
+#include "llvm/Support/MathExtras.h"
 #include <cassert>
 #include <cstddef>
+#include <limits>
 
 #define DEBUG_TYPE "mask-analysis"
 
@@ -472,6 +476,74 @@ LogicalResult MaskState::parseExtSI(arith::ExtSIOp op, const Location loc,
   return parse(op.getIn(), loc, builder);
 }
 
+static bool canPeelScale(arith::MulIOp mul, Value x, const APInt &scale) {
+  if (scale.isOne() || bitEnumContainsAll(mul.getOverflowFlags(),
+                                          arith::IntegerOverflowFlags::nsw)) {
+    return true;
+  }
+  auto productType = dyn_cast<IntegerType>(getElementTypeOrSelf(mul.getType()));
+  if (!productType || productType.getWidth() != scale.getBitWidth()) {
+    return false;
+  }
+  while (true) {
+    if (auto ext = x.getDefiningOp<arith::ExtSIOp>()) {
+      x = ext.getIn();
+    } else if (auto expand = x.getDefiningOp<triton::ExpandDimsOp>()) {
+      x = expand.getSrc();
+    } else if (auto broadcast = x.getDefiningOp<triton::BroadcastOp>()) {
+      x = broadcast.getSrc();
+    } else {
+      break;
+    }
+  }
+  auto range = x.getDefiningOp<triton::MakeRangeOp>();
+  if (!range || range.getStart() >= range.getEnd()) {
+    return false;
+  }
+  int64_t maxIndex = int64_t(range.getEnd()) - 1;
+  auto rangeWidth = cast<ShapedType>(range.getType()).getElementTypeBitWidth();
+  int64_t rangeMax = APInt::getSignedMaxValue(rangeWidth).getSExtValue();
+  int64_t productMax =
+      APInt::getSignedMaxValue(productType.getWidth()).getSExtValue();
+  return maxIndex <= rangeMax && maxIndex <= productMax / scale.getSExtValue();
+}
+
+// Splits a non-wrapping `c * x` with positive constant `c` (through extsi)
+// into `{x, c}`; returns `{value, 1}` otherwise.
+static std::pair<Value, int64_t> peelPositiveScale(Value value) {
+  constexpr unsigned scaleStorageWidth =
+      std::numeric_limits<int64_t>::digits + 1;
+  Value inner = value;
+  while (auto ext = inner.getDefiningOp<arith::ExtSIOp>()) {
+    inner = ext.getIn();
+  }
+  auto mul = inner.getDefiningOp<arith::MulIOp>();
+  if (!mul) {
+    return {value, 1};
+  }
+  for (auto [x, c] : {std::pair{mul.getLhs(), mul.getRhs()},
+                      std::pair{mul.getRhs(), mul.getLhs()}}) {
+    APInt scale;
+    if (matchPattern(c, m_ConstantInt(&scale)) &&
+        scale.getBitWidth() <= scaleStorageWidth &&
+        scale.isStrictlyPositive() && canPeelScale(mul, x, scale)) {
+      return {x, scale.getSExtValue()};
+    }
+  }
+  return {value, 1};
+}
+
+static OpFoldResult ceilDivOFR(OpFoldResult numerator, int64_t denominator,
+                               const Location loc, OpBuilder &builder) {
+  if (auto value = getIntAttr(numerator)) {
+    return builder.getIndexAttr(llvm::divideCeilSigned(*value, denominator));
+  }
+  Value divisor = arith::ConstantIndexOp::create(builder, loc, denominator);
+  return arith::CeilDivSIOp::create(builder, loc, cast<Value>(numerator),
+                                    divisor)
+      .getResult();
+}
+
 LogicalResult MaskState::parseCmp(arith::CmpIOp cmpOp, const Location loc,
                                   OpBuilder &builder) {
   assert(this->isEmpty());
@@ -525,26 +597,48 @@ LogicalResult MaskState::parseCmp(arith::CmpIOp cmpOp, const Location loc,
     return failure();
   }
 
-  MaskState lhsState;
-  if (failed(lhsState.parse(cmpOp.getLhs(), loc, builder)))
-    return failure();
-
   MaskState rhsState;
-  if (failed(rhsState.parse(cmpOp.getRhs(), loc, builder)))
-    return failure();
-
   // We only support sge against 0 for lower bounds. Dims already has an
   // implicit assumption that the lower bound is 0, so if we see this, assume
-  // the comparison evaluates to true. That assumption does not hold when a
-  // negative constant was added to the range (e.g. arange - 1), so bail out.
+  // the comparison evaluates to true.
+  if (cmpOp.getPredicate() == arith::CmpIPredicate::sge) {
+    if (failed(rhsState.parse(cmpOp.getRhs(), loc, builder)) ||
+        !rhsState.scalar) {
+      return failure();
+    }
+    if (!hasConstZero(rhsState.scalar)) {
+      LLVM_DEBUG({
+        InFlightDiagnostic diag =
+            emitRemark(loc, "Unsupported cmpi with rhs not equal to 0");
+      });
+      return failure();
+    }
+  }
+
+  // For c > 0 without signed overflow, c * x < R is x < ceildiv(R, c).
+  auto [lhs, scale] = (cmpOp.getPredicate() == arith::CmpIPredicate::slt ||
+                       cmpOp.getPredicate() == arith::CmpIPredicate::sge)
+                          ? peelPositiveScale(cmpOp.getLhs())
+                          : std::pair{cmpOp.getLhs(), int64_t{1}};
+  MaskState lhsState;
+  if (failed(lhsState.parse(lhs, loc, builder))) {
+    return failure();
+  }
+  if (cmpOp.getPredicate() != arith::CmpIPredicate::sge &&
+      (failed(rhsState.parse(cmpOp.getRhs(), loc, builder)) ||
+       !rhsState.scalar)) {
+    return failure();
+  }
   if (cmpOp.getPredicate() == arith::CmpIPredicate::sge &&
-      (!(rhsState.scalar && hasConstZero(rhsState.scalar)) ||
-       lhsState.seenRangeNegativeShift)) {
+      lhsState.seenRangeNegativeShift) {
     LLVM_DEBUG({
       InFlightDiagnostic diag =
-          emitRemark(loc, "Unsupported cmpi with rhs not equal to 0");
+          emitRemark(loc, "Unsupported cmpi with negatively shifted range");
     });
     return failure();
+  }
+  if (scale != 1) {
+    rhsState.scalar = ceilDivOFR(rhsState.scalar, scale, loc, builder);
   }
 
   int32_t cmpDim = lhsState.scalar && rhsState.scalar ? 0 : -1;
@@ -562,11 +656,12 @@ LogicalResult MaskState::parseCmp(arith::CmpIOp cmpOp, const Location loc,
       cmpDim = i;
     }
   }
-  assert(
-      cmpDim != -1 ||
-      (!lhsState.scalar && cmpOp.getPredicate() == arith::CmpIPredicate::slt ||
-       cmpOp.getPredicate() == arith::CmpIPredicate::ult) &&
-          "Unexpected case where no dimension has size larger than 1");
+  assert(lhsState.scalar || lhsState.getRank() > 0);
+  // For a one-element tensor every dim has size 1, so the loop above finds no
+  // dim to mask. Mask dim 0 instead of dropping the mask.
+  if (cmpDim == -1) {
+    cmpDim = 0;
+  }
 
   OpFoldResult newDim;
   if (lhsState.scalar) {
@@ -692,16 +787,21 @@ LogicalResult MaskState::parseLoopIterArg(Value v, const Location loc,
       }
     }
 
-    if (!lhsState.start && !lhsState.end) {
-      assert(lhsState.scalar && "MaskState must have a scalar");
-      lhsState.start = builder.getIndexAttr(0);
-      lhsState.end = lhsState.scalar;
+    Value offset = forOp.getRegionIterArg(argIndex + 1);
+    if (lhsState.scalar) {
+      auto type = dyn_cast<RankedTensorType>(v.getType());
+      if (!type || type.getRank() != 1 || type.getDimSize(0) != 1) {
+        return failure();
+      }
+      this->dims.push_back(builder.getIndexAttr(1));
+      this->scalar = offset;
+      return success();
     }
 
-    auto dist = subOFRs(lhsState.end, lhsState.start, loc, builder);
-    this->start = forOp.getRegionIterArg(argIndex + 1);
-    this->end = addOFRs(this->start, dist, loc, builder);
     this->dims = lhsState.dims;
+    auto dist = subOFRs(lhsState.end, lhsState.start, loc, builder);
+    this->start = offset;
+    this->end = addOFRs(this->start, dist, loc, builder);
 
     return success();
   }
