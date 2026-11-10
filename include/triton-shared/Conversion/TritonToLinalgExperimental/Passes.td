@@ -16,6 +16,8 @@ def TritonToLinalgExperimental : Pass<"triton-to-linalg-experimental", "mlir::Mo
   let options = [
       Option<"enableMakeGatherScatterTensorPtr", "enable-make-gather-scatter", "bool", /*default*/"true",
              "Enable make_gather_scatter_tptr support">,
+      Option<"enableModuloSupport", "enable-modulo-support", "bool", /*default*/"true",
+             "Enable modulo operation support in pointer analysis">,
       Option<"enableCollapseShape", "enable-collapse-shape", "bool", /*default*/"false",
              "Enable collapse shape pass">,
   ];
