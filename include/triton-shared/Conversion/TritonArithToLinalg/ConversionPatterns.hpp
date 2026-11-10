@@ -1026,6 +1026,78 @@ struct JoinConverter : public OpConversionPattern<triton::JoinOp> {
   }
 };
 
+// Lowers `tt.gather` to a `linalg.generic` that reads `indices` through the
+// identity affine map and, for each output position, extracts the gathered
+// element out of `src` via `tensor.extract` at a dynamically-computed
+// coordinate. `src` is not threaded through the generic op's affine-mapped
+// operands (its access pattern along the gather axis is not affine) — it is
+// captured directly and read inside the body instead, the same idiom
+// torch-mlir uses to lower `aten.index_select`/`aten.embedding`. This gives
+// `tt.gather` a `linalg.generic` body made only of ops (tensor.extract,
+// linalg.index, arith.index_cast) that already have working
+// BufferizableOpInterface models, so OneShotBufferizePass handles it for
+// free with no new interface registration.
+struct GatherConverter : public OpConversionPattern<triton::GatherOp> {
+  using OpConversionPattern<triton::GatherOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(triton::GatherOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto loc = op.getLoc();
+    Value src = adaptor.getSrc();
+    Value indices = adaptor.getIndices();
+
+    auto srcType = cast<RankedTensorType>(src.getType());
+    auto idxType = cast<RankedTensorType>(indices.getType());
+    auto resType = cast<RankedTensorType>(op.getResult().getType());
+
+    if (!srcType.hasStaticShape() || !idxType.hasStaticShape())
+      return rewriter.notifyMatchFailure(
+          op, "gather: only static src/indices shapes are supported");
+
+    int64_t axis = op.getAxis();
+    int64_t rank = idxType.getRank();
+
+    // indices and the output share the same shape, so both use the identity
+    // map; src is captured below rather than driven through an ins() operand.
+    SmallVector<AffineMap> indexingMaps(
+        /*indices*/ 1 + /*output*/ 1,
+        rewriter.getMultiDimIdentityMap(rank));
+
+    Value init = tensor::EmptyOp::create(rewriter, loc, resType.getShape(),
+                                         resType.getElementType());
+
+    auto linalgOp = linalg::GenericOp::create(
+        rewriter, loc, op->getResultTypes(), ValueRange{indices},
+        ValueRange{init}, indexingMaps, getNParallelLoopsAttrs(rank),
+        [&](OpBuilder &nestedBuilder, Location nestedLoc,
+            ValueRange blockArgs) {
+          Value idxScalar = blockArgs[0];
+          Value idxAsIndex = arith::IndexCastOp::create(
+              nestedBuilder, nestedLoc, nestedBuilder.getIndexType(),
+              idxScalar);
+
+          SmallVector<Value> coords;
+          coords.reserve(rank);
+          for (int64_t dim = 0; dim < rank; ++dim) {
+            if (dim == axis) {
+              coords.push_back(idxAsIndex);
+            } else {
+              coords.push_back(
+                  linalg::IndexOp::create(nestedBuilder, nestedLoc, dim));
+            }
+          }
+
+          Value gathered =
+              tensor::ExtractOp::create(nestedBuilder, nestedLoc, src, coords);
+          linalg::YieldOp::create(nestedBuilder, nestedLoc, gathered);
+        });
+
+    rewriter.replaceOp(op, linalgOp->getResults());
+    return success();
+  }
+};
+
 struct MulHiUIOpConverter : public OpConversionPattern<triton::MulhiUIOp> {
   using OpConversionPattern<triton::MulhiUIOp>::OpConversionPattern;
 
