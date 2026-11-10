@@ -49,6 +49,10 @@ struct UseInfo : public dataflow::AbstractSparseLattice {
     case UseType::MixUse:
       return ChangeResult::NoChange;
     }
+
+    // Keep the function total for compilers that do not infer enum
+    // exhaustiveness from the switch above.
+    return ChangeResult::NoChange;
   }
 
   ChangeResult meet(const AbstractSparseLattice &other) override {
