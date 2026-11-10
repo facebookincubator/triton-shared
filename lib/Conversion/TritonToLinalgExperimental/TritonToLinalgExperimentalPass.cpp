@@ -62,7 +62,7 @@ public:
     pm.addPass(createCanonicalizerPass());
 
     pm.addPass(createTritonToUnstructuredPass());
-    pm.addPass(createTritonArithToLinalgPass(/*tensorPtrToLinalg=*/true));
+    pm.addPass(createTritonArithToLinalgPass(/*tensorPtrToLinalg=*/true, /*transposeReduceToRank0*/false));
 
     pm.addPass(createStructuredToMemrefPass());
     pm.addPass(createUnstructuredToMemrefPass());
